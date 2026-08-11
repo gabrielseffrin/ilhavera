@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Tier pesado dos testes de propriedade, de madrugada.
+    - cron: '0 5 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: lint + typecheck + testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sem `version:` de propósito: a versão vem do campo `packageManager`
+      # do package.json, então CI e container nunca divergem.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint (inclui a regra de fronteira que protege packages/rules)
+        run: pnpm lint
+
+      - run: pnpm typecheck
+
+      - name: Testes com cobertura
+        run: pnpm test:coverage
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cobertura-rules
+          path: packages/rules/coverage
+          retention-days: 7
+
+  imagem:
+    name: build da imagem de desenvolvimento
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Garante que a paridade dev/prod não apodrece sem ninguém notar.
+      - run: docker build -f docker/Dockerfile.dev -t ilhavera-dev .
+
+  propriedade-pesado:
+    name: 10.000 partidas aleatórias
+    # Caro demais para todo PR; roda de madrugada e sob demanda.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:heavy

@@ -1,0 +1,32 @@
+{
+  "name": "ilhavera",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "//lint": "Uma passada do root cobre o monorepo inteiro, inclusive os arquivos de config da raiz que o turbo por pacote não alcança.",
+    "lint": "eslint .",
+    "lint:packages": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:coverage": "turbo run test:coverage",
+    "test:heavy": "pnpm --filter @ilhavera/rules test:heavy",
+    "play": "turbo run build --filter=@ilhavera/rules && pnpm --filter @ilhavera/cli play",
+    "demo": "turbo run build --filter=@ilhavera/rules && pnpm --filter @ilhavera/cli demo",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  }
+}

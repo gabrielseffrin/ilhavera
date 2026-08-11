@@ -1,0 +1,62 @@
+name: ilhavera
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    working_dir: /workspace
+    command: sleep infinity
+    stdin_open: true
+    tty: true
+    environment:
+      DATABASE_URL: postgres://ilhavera:ilhavera@postgres:5432/ilhavera
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: development
+    volumes:
+      # Código-fonte: bind mount, edição no host reflete no container na hora.
+      - .:/workspace
+      # node_modules NÃO pode viver no bind mount: o store simlinkado do pnpm
+      # sobre VirtioFS é lento e quebra symlinks. Um volume nomeado por pacote.
+      - pnpm-store:/pnpm-store
+      - nm-root:/workspace/node_modules
+      - nm-protocol:/workspace/packages/protocol/node_modules
+      - nm-rules:/workspace/packages/rules/node_modules
+      - nm-cli:/workspace/apps/cli/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # Postgres e Redis sobem desde já para a Fase 2 (servidor + persistência).
+  # Nada na Fase 1 depende deles: o motor de regras é puro e sem I/O.
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ilhavera
+      POSTGRES_PASSWORD: ilhavera
+      POSTGRES_DB: ilhavera
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ilhavera -d ilhavera']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save '' --appendonly no
+    ports:
+      - '6379:6379'
+
+volumes:
+  pgdata:
+  pnpm-store:
+  nm-root:
+  nm-protocol:
+  nm-rules:
+  nm-cli:
