@@ -1,0 +1,22 @@
+{
+  "name": "@ilhavera/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint src",
+    "test": "echo 'sem testes nesta fase' && exit 0",
+    "play": "tsx src/main.ts",
+    "demo": "tsx src/main.ts --demo"
+  },
+  "dependencies": {
+    "@ilhavera/rules": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.6",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
