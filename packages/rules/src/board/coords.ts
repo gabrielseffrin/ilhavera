@@ -11,7 +11,7 @@ export type HexCoord = { q: number; r: number };
  * entre o hexágono e os vizinhos `i` e `i+1`, então mudar esta lista renumera
  * todos os cantos.
  *
- * Com a projeção em pixel de `pixel.ts`, as direções são:
+ * Com a projeção em pixel de `graph.ts`, as direções são:
  * 0=L, 1=NE, 2=NO, 3=O, 4=SO, 5=SE.
  */
 export const DIRS: readonly (readonly [number, number])[] = [

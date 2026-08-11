@@ -523,30 +523,30 @@ Executar milhares de partidas com ações aleatórias legais e verificar invaria
 
 Premissa de estimativa: **1 desenvolvedor, meio período (~12h/semana)**. Com dedicação integral, dividir por ~3.
 
-### Fase 0 — Fundação (1 semana)
-- [ ] Monorepo pnpm + Turborepo, TS strict, ESLint/Prettier
-- [ ] Regra de import boundaries protegendo `packages/rules`
-- [ ] docker-compose (Postgres + Redis) para dev
-- [ ] GitHub Actions: lint + typecheck + testes em cada PR
-- [ ] ADR-001 registrando a escolha da stack
-- **Aceite:** `pnpm test` verde no CI num repo vazio de funcionalidade
+### Fase 0 — Fundação (1 semana) ✅
+- [x] Monorepo pnpm + Turborepo, TS strict, ESLint/Prettier
+- [x] Regra de import boundaries protegendo `packages/rules` — `eslint.config.js`
+- [x] docker-compose (Postgres + Redis) para dev
+- [x] GitHub Actions: lint + typecheck + testes em cada PR — `.github/workflows/ci.yml`
+- [x] ADR-001 registrando a escolha da stack (e ADR-002, fechando as decisões da §11)
+- **Aceite:** ✅ `pnpm test` verde. Publicado em 11/08/2026.
 
-### Fase 1 — Motor de regras ⭐ (3–4 semanas)
+### Fase 1 — Motor de regras ⭐ (3–4 semanas) ✅
 > Fase mais crítica. Nenhuma linha de UI aqui.
-- [ ] PRNG semeado + utilitários determinísticos
-- [ ] Geração do tabuleiro e construção do `BoardGraph` (54 vértices / 72 arestas — validado por teste)
-- [ ] Geração de números com restrição 6/8 e portos
-- [ ] Máquina de estados e `reduce(state, action)`
-- [ ] Setup, rolagem, produção, construção, regra de distância
-- [ ] Saqueador completo (descarte, movimento, roubo)
-- [ ] Cartas de Progresso (5 tipos, restrições de uso)
-- [ ] Comércio: banco, portos, jogador↔jogador
-- [ ] Estrada Mais Longa (DFS) e Maior Exército
-- [ ] Cálculo de PV e condição de vitória
-- [ ] `toClientView` com filtro de informação oculta
-- [ ] Suíte de testes níveis 1, 2 e 3
-- [ ] **CLI de partida hot-seat no terminal** para jogar uma partida completa sem UI
-- **Aceite:** partida completa jogável pelo terminal, do setup à vitória, com todas as regras; 10.000 partidas aleatórias sem violar invariantes
+- [x] PRNG semeado + utilitários determinísticos — `src/rng.ts` (splitmix32 *counter-based*: `(seed, cursor)` puro, então um snapshot restaura por `rngCursor` sem reexecutar a sequência)
+- [x] Geração do tabuleiro e construção do `BoardGraph` (54 vértices / 72 arestas — validado por teste) — `src/board/graph.ts`, `test/board.test.ts`
+- [x] Geração de números com restrição 6/8 e portos — `src/board/generate.ts` (re-shuffle determinístico; modo aleatório puro também testado)
+- [x] Máquina de estados e `reduce(state, action)` — `src/reduce.ts`, `src/actions/index.ts`
+- [x] Setup, rolagem, produção, construção, regra de distância — `src/actions/{setup,roll,build}.ts`
+- [x] Saqueador completo (descarte, movimento, roubo) — `src/actions/robber.ts`
+- [x] Cartas de Progresso (5 tipos, restrições de uso) — `src/actions/devcards.ts`
+- [x] Comércio: banco, portos, jogador↔jogador — `src/actions/trade.ts` (inclui contraproposta)
+- [x] Estrada Mais Longa (DFS) e Maior Exército — `src/scoring/longestRoad.ts`, `src/scoring/victory.ts`
+- [x] Cálculo de PV e condição de vitória — `src/scoring/victory.ts`
+- [x] `toClientView` com filtro de informação oculta — `src/view.ts` (filtra também o **log de eventos**)
+- [x] Suíte de testes níveis 1, 2 e 3 — 218 testes, 98,8% de linhas / 89,1% de branches
+- [x] **CLI de partida hot-seat no terminal** para jogar uma partida completa sem UI — `apps/cli/`, menu montado a partir de `enumerateLegalActions`
+- **Aceite:** ✅ partida completa jogável pelo terminal (`make play`, `make demo`); 10.000 partidas aleatórias sem violar invariantes — `make heavy` em 11/08/2026, 10 testes passando em 21min (1.259s), invariantes checados **após cada ação** de cada partida, mais mesas de 3 jogadores e modo de tabuleiro aleatório puro, mais 2.000 runs de replay determinístico
 
 ### Fase 2 — Servidor e protocolo (2 semanas)
 - [ ] Fastify + Socket.IO, health check

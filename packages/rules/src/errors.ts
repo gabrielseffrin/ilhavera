@@ -35,7 +35,6 @@ export const ERROR_CODES = [
   'INVALID_TRADE',
   'TRADE_EXPIRED',
   'TRADE_NOT_ACCEPTED',
-  'INVALID_PORT_RATE',
   'INVALID_ACTION',
 ] as const;
 
