@@ -5,8 +5,9 @@
  * jogadores não é uma partida, e modelá-la no `GameState` traria preocupação de
  * rede para dentro do pacote puro. `createGame` só é chamado em `start()`.
  *
- * **Em memória neste marco**, como a identidade. A M5 troca a implementação por
- * Postgres; o formato já é o das tabelas `rooms` e `room_players` de §7.
+ * **Em memória em runtime**, como a identidade: o lobby responde a cada comando
+ * e não pode virar consulta ao banco. As tabelas `rooms` e `room_players` de §7
+ * são o diário, gravadas a cada mudança de assento ou de status.
  *
  * Erro é valor de retorno, nunca exceção — mesma escolha do `reduce` do motor,
  * pelo mesmo motivo: o servidor precisa responder `ack: { ok: false }` sem
@@ -20,6 +21,14 @@ import { MAX_PLAYERS, MIN_PLAYERS, PLAYER_COLORS, type PlayerColor } from '@ilha
 
 import { GameRoom } from '../game/room.js';
 import type { PlayerId } from '../identity/players.js';
+import {
+  gravarEmSegundoPlano,
+  NullStore,
+  WriteQueue,
+  type OnWriteError,
+  type Store,
+  type StoredRoom,
+} from '../persistence/store.js';
 import { generateUniqueRoomCode } from './code.js';
 
 export type RoomStatus = 'lobby' | 'playing' | 'finished';
@@ -76,6 +85,10 @@ export type RoomRegistryOptions = {
   now?: () => number;
   /** Injetável para que o teste force uma partida reproduzível. */
   makeSeed?: () => string;
+  store?: Store;
+  onWriteError?: OnWriteError;
+  /** Compartilhada com os `GameRoom`, para que sala e ação cheguem em ordem. */
+  writes?: WriteQueue;
 };
 
 export class RoomRegistry {
@@ -83,10 +96,43 @@ export class RoomRegistry {
   readonly #byPlayer = new Map<PlayerId, string>();
   readonly #now: () => number;
   readonly #makeSeed: () => string;
+  readonly #store: Store;
+  readonly #onWriteError: OnWriteError;
+  readonly #writes: WriteQueue;
 
   constructor(options: RoomRegistryOptions = {}) {
     this.#now = options.now ?? Date.now;
     this.#makeSeed = options.makeSeed ?? (() => randomBytes(16).toString('hex'));
+    this.#store = options.store ?? new NullStore();
+    this.#onWriteError = options.onWriteError ?? ((): void => {});
+    this.#writes = options.writes ?? new WriteQueue();
+  }
+
+  /** O que vai para a tabela — a projeção da sala para o diário. */
+  #paraOBanco(room: Room): StoredRoom {
+    return {
+      id: room.id,
+      code: room.code,
+      hostId: room.hostId,
+      status: room.status,
+      settings: { ...room.settings },
+      createdAt: room.createdAt,
+      finishedAt: null,
+      seats: room.seats.map((s, i) => ({
+        playerId: s.playerId,
+        seatIndex: i,
+        color: s.color,
+      })),
+    };
+  }
+
+  #gravar(room: Room): void {
+    const guardada = this.#paraOBanco(room);
+    gravarEmSegundoPlano(
+      this.#writes.enqueue(room.id, () => this.#store.saveRoom(guardada)),
+      'saveRoom',
+      this.#onWriteError,
+    );
   }
 
   byCode(code: string): Room | undefined {
@@ -120,6 +166,7 @@ export class RoomRegistry {
 
     this.#byCode.set(room.code, room);
     this.#byPlayer.set(hostId, room.code);
+    this.#gravar(room);
     return { ok: true, value: room };
   }
 
@@ -150,6 +197,7 @@ export class RoomRegistry {
     });
     this.#byPlayer.set(playerId, code);
     this.#touch(room);
+    this.#gravar(room);
     return { ok: true, value: room };
   }
 
@@ -176,6 +224,12 @@ export class RoomRegistry {
 
     if (room.seats.length === 0) {
       this.#byCode.delete(room.code);
+      // Lobby que esvaziou não é histórico de nada: sai do banco junto.
+      gravarEmSegundoPlano(
+        this.#writes.enqueue(room.id, () => this.#store.deleteRoom(room.id)),
+        'deleteRoom',
+        this.#onWriteError,
+      );
       return { ok: true, value: { room, removed: true } };
     }
 
@@ -187,6 +241,7 @@ export class RoomRegistry {
     }
 
     this.#touch(room);
+    this.#gravar(room);
     return { ok: true, value: { room, removed: true } };
   }
 
@@ -205,6 +260,9 @@ export class RoomRegistry {
     });
     room.status = 'playing';
     this.#touch(room);
+    // Antes de qualquer jogada: as ações têm chave estrangeira para a sala, e
+    // gravar ação de sala que ainda não existe é violação de integridade.
+    this.#gravar(room);
 
     return { ok: true, value: room };
   }

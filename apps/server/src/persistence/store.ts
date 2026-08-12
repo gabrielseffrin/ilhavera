@@ -81,6 +81,68 @@ export interface Store {
   close(): Promise<void>;
 }
 
+/** Avisado quando uma gravação em segundo plano falha. */
+export type OnWriteError = (erro: unknown, contexto: string) => void;
+
+/**
+ * Dispara uma gravação sem esperar por ela, sem deixar a rejeição escapar.
+ *
+ * Nem toda escrita pode ser esperada: o handshake não vai ficar parado
+ * aguardando o banco só para emitir um token. Mas promessa rejeitada sem
+ * tratamento derruba o processo Node — e perder o servidor inteiro porque o
+ * `UPDATE` de um apelido falhou seria trocar um arranhão por uma amputação.
+ */
+export function gravarEmSegundoPlano(
+  operacao: Promise<void>,
+  contexto: string,
+  onError: OnWriteError,
+): void {
+  operacao.catch((erro: unknown) => {
+    onError(erro, contexto);
+  });
+}
+
+/**
+ * Serializa gravações por chave — na prática, por sala.
+ *
+ * Não é zelo: `game_actions` tem chave estrangeira para `rooms`, e o `INSERT`
+ * da sala é disparado sem `await` no `room:start` enquanto o da primeira ação é
+ * esperado dentro do `GameRoom`. Sem uma ordem comum, a ação chega antes da
+ * sala existir e o banco recusa — um erro que só apareceria na primeira jogada
+ * rápida de uma partida real, e nunca num teste tranquilo.
+ *
+ * Com a fila, esperar a gravação da ação espera junto tudo o que foi
+ * enfileirado antes dela para aquela sala.
+ */
+export class WriteQueue {
+  readonly #chains = new Map<string, Promise<void>>();
+
+  enqueue(key: string, trabalho: () => Promise<void>): Promise<void> {
+    const anterior = this.#chains.get(key) ?? Promise.resolve();
+    const proximo = anterior.then(trabalho);
+
+    // A cauda absorve a rejeição para não travar a fila nem escapar; quem
+    // chamou continua recebendo o erro pela promessa devolvida.
+    this.#chains.set(
+      key,
+      proximo.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return proximo;
+  }
+
+  /** Espera tudo o que já foi enfileirado para uma chave. */
+  async settled(key: string): Promise<void> {
+    await this.#chains.get(key);
+  }
+
+  esquecer(key: string): void {
+    this.#chains.delete(key);
+  }
+}
+
 /**
  * O caminho "sem persistência": aceita tudo e não guarda nada.
  *

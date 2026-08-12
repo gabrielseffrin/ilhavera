@@ -6,13 +6,20 @@
  * esse token. É o suficiente para "sou o mesmo que estava jogando", que é a
  * única pergunta que o MVP precisa responder.
  *
- * **Em memória neste marco.** A tabela `players` entra na M5, junto com o resto
- * da persistência; até lá, reiniciar o servidor perde as identidades. O formato
- * do registro já é o da tabela para que a troca seja de implementação, não de
- * contrato.
+ * **O diretório em memória continua sendo a fonte de verdade em runtime**: a
+ * verificação de token é feita a cada handshake e não pode virar ida ao banco.
+ * A tabela `players` é o diário — gravada a cada emissão e carregada na subida,
+ * para que reiniciar o servidor não expulse quem já estava jogando.
  */
 
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+
+import {
+  gravarEmSegundoPlano,
+  NullStore,
+  type OnWriteError,
+  type Store,
+} from '../persistence/store.js';
 
 export type PlayerId = string;
 
@@ -42,26 +49,62 @@ function hash(secret: string): Buffer {
 
 export type PlayerDirectoryOptions = {
   now?: () => number;
+  store?: Store;
+  onWriteError?: OnWriteError;
 };
 
 export class PlayerDirectory {
   readonly #records = new Map<PlayerId, PlayerRecord & { secretHash: Buffer }>();
   readonly #now: () => number;
+  readonly #store: Store;
+  readonly #onWriteError: OnWriteError;
 
   constructor(options: PlayerDirectoryOptions = {}) {
     this.#now = options.now ?? Date.now;
+    this.#store = options.store ?? new NullStore();
+    this.#onWriteError = options.onWriteError ?? ((): void => {});
   }
 
+  /** Traz de volta as identidades emitidas antes do reinício. */
+  async restore(): Promise<void> {
+    for (const guardado of await this.#store.loadPlayers()) {
+      this.#records.set(guardado.id, {
+        id: guardado.id,
+        nickname: guardado.nickname,
+        createdAt: guardado.createdAt,
+        secretHash: Buffer.from(guardado.secretHash, 'hex'),
+      });
+    }
+  }
+
+  /**
+   * A gravação é assíncrona e o token é devolvido na hora, de propósito: o
+   * handshake não pode esperar o banco. Se o processo morrer entre uma coisa e
+   * outra, o cliente fica com um token que o servidor não reconhece — e o
+   * caminho de token inválido já existe e trata isso como visitante novo.
+   */
   issue(): IssuedIdentity {
     const id = randomUUID();
     const secret = randomBytes(32).toString('base64url');
+    const secretHash = hash(secret);
 
     this.#records.set(id, {
       id,
       nickname: null,
       createdAt: this.#now(),
-      secretHash: hash(secret),
+      secretHash,
     });
+
+    gravarEmSegundoPlano(
+      this.#store.savePlayer({
+        id,
+        nickname: null,
+        secretHash: secretHash.toString('hex'),
+        createdAt: this.#now(),
+      }),
+      'savePlayer',
+      this.#onWriteError,
+    );
 
     return { id, token: `${id}.${secret}` };
   }
@@ -97,7 +140,14 @@ export class PlayerDirectory {
   /** O apelido chega junto de `room:create`/`room:join`, não no handshake. */
   setNickname(id: PlayerId, nickname: string): void {
     const record = this.#records.get(id);
-    if (record !== undefined) record.nickname = nickname;
+    if (record === undefined) return;
+
+    record.nickname = nickname;
+    gravarEmSegundoPlano(
+      this.#store.setPlayerNickname(id, nickname),
+      'setPlayerNickname',
+      this.#onWriteError,
+    );
   }
 
   get size(): number {

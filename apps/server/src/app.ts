@@ -10,6 +10,7 @@ import { Server as IOServer } from 'socket.io';
 
 import type { Config } from './config.js';
 import { PlayerDirectory } from './identity/players.js';
+import { NullStore, WriteQueue, type Store } from './persistence/store.js';
 import { registerHandlers } from './protocol/connection.js';
 import type { GameServer } from './protocol/types.js';
 import { RoomRegistry, type RoomRegistryOptions } from './rooms/registry.js';
@@ -29,6 +30,8 @@ export type AppServer = {
 export type BuildOptions = {
   /** Injetável para o teste fixar semente e relógio e obter partida reproduzível. */
   registry?: RoomRegistryOptions;
+  /** Sem loja, o servidor sobe e joga — só não sobrevive ao próprio reinício. */
+  store?: Store;
 };
 
 export function buildServer(config: Config, options: BuildOptions = {}): AppServer {
@@ -53,8 +56,16 @@ export function buildServer(config: Config, options: BuildOptions = {}): AppServ
     cors: { origin: config.CORS_ORIGIN },
   });
 
-  const players = new PlayerDirectory();
-  const rooms = new RoomRegistry(options.registry ?? {});
+  const store = options.store ?? new NullStore();
+  const writes = new WriteQueue();
+  const onWriteError = (erro: unknown, contexto: string): void => {
+    // A gravação falhou, o jogo continua. Perder a partida inteira porque o
+    // banco piscou seria pior do que perder o diário dela.
+    fastify.log.error({ err: erro, operacao: contexto }, 'falha ao gravar');
+  };
+
+  const players = new PlayerDirectory({ store, onWriteError });
+  const rooms = new RoomRegistry({ store, writes, onWriteError, ...options.registry });
 
   /**
    * A raiz existe para quem abre `localhost:3000` no navegador e precisa
