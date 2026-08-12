@@ -3,10 +3,12 @@
 Jogo de tabuleiro multiplayer de colonização por hexágonos, jogável pelo
 navegador, para partidas privadas entre amigos.
 
-**Estado atual: Fases 0 e 1 concluídas.** O motor de regras está completo e
-testado, e já dá para jogar uma partida inteira pelo terminal — do sorteio do
-tabuleiro à vitória por 10 pontos. Ainda não existe servidor nem interface
-gráfica; são as Fases 2 e 3.
+**Estado atual: Fases 0 e 1 concluídas; Fase 2 em andamento.** O motor de regras
+está completo e testado, e já dá para jogar uma partida inteira pelo terminal —
+do sorteio do tabuleiro à vitória por 10 pontos. O servidor existe como
+esqueleto (sobe, responde `/health`, aceita sockets) e ainda não conhece o
+motor: salas e partida em rede são os próximos marcos. Interface gráfica é a
+Fase 3.
 
 Especificação completa em [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -21,6 +23,7 @@ make up          # sobe app + postgres + redis e instala as dependências
 make test        # roda a suíte inteira
 make demo        # assiste a uma partida completa se jogando sozinha
 make play        # joga uma partida hot-seat no terminal
+make dev         # servidor de jogo em watch, na porta 3000
 ```
 
 Sem `make`, os mesmos comandos:
@@ -36,7 +39,8 @@ docker compose exec app pnpm play
 
 ```
 packages/rules/      ⭐ motor de regras: puro, determinístico, sem I/O
-packages/protocol/      esquemas dos comandos/eventos de rede (Fase 2)
+packages/protocol/      esquemas dos comandos/eventos de rede
+apps/server/            Fastify + Socket.IO — servidor autoritativo (Fase 2)
 apps/cli/               partida hot-seat no terminal
 docs/                   roadmap, ADRs, schema do banco
 ```

@@ -23,6 +23,9 @@ services:
       - nm-protocol:/workspace/packages/protocol/node_modules
       - nm-rules:/workspace/packages/rules/node_modules
       - nm-cli:/workspace/apps/cli/node_modules
+      - nm-server:/workspace/apps/server/node_modules
+    ports:
+      - '3000:3000'
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,3 +63,4 @@ volumes:
   nm-protocol:
   nm-rules:
   nm-cli:
+  nm-server:

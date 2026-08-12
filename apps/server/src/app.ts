@@ -1,0 +1,88 @@
+/**
+ * Monta o servidor: Fastify para HTTP, Socket.IO para a partida.
+ *
+ * Nada de regra de jogo aqui — o motor entra na M3, atrás da fila por sala.
+ * Neste marco o servidor só sobe, responde `/health` e aceita conexões.
+ */
+
+import Fastify, { type FastifyInstance } from 'fastify';
+import { Server as IOServer } from 'socket.io';
+
+import type { Config } from './config.js';
+
+export type Address = { host: string; port: number };
+
+export type AppServer = {
+  readonly fastify: FastifyInstance;
+  readonly io: IOServer;
+  /** Sobe e devolve o endereço real — que difere do pedido quando `PORT` é 0. */
+  listen(): Promise<Address>;
+  close(): Promise<void>;
+};
+
+export function buildServer(config: Config): AppServer {
+  const fastify = Fastify({
+    logger: { level: config.LOG_LEVEL },
+    /**
+     * A Fase 6 põe Traefik/Caddy na frente. Sem isto, todo cliente chega com o
+     * IP do proxy — e o rate limit por socket da M7 acabaria medindo o proxy em
+     * vez da pessoa.
+     */
+    trustProxy: true,
+    /**
+     * Uma conexão de WebSocket nunca fica ociosa, então o `'idle'` padrão faz
+     * `close()` esperar para sempre por ela. Num servidor de jogo isso não é
+     * detalhe de teste: é o processo que não morre no deploy e trava o rollback.
+     */
+    forceCloseConnections: true,
+  });
+
+  const io = new IOServer(fastify.server, {
+    serveClient: false,
+    cors: { origin: config.CORS_ORIGIN },
+  });
+
+  fastify.get('/health', () => ({
+    status: 'ok',
+    uptime: Math.round(process.uptime()),
+    sockets: io.engine.clientsCount,
+  }));
+
+  io.on('connection', (socket) => {
+    fastify.log.debug({ socketId: socket.id }, 'socket conectado');
+
+    socket.on('disconnect', (reason) => {
+      fastify.log.debug({ socketId: socket.id, reason }, 'socket desconectado');
+    });
+  });
+
+  /** Rede de segurança para quem chamar `fastify.close()` sem passar por `close()`. */
+  fastify.addHook('onClose', (_instance, done) => {
+    io.local.disconnectSockets(true);
+    io.engine.close();
+    done();
+  });
+
+  return {
+    fastify,
+    io,
+
+    async listen(): Promise<Address> {
+      await fastify.listen({ port: config.PORT, host: config.HOST });
+
+      const address = fastify.server.address();
+      if (address === null || typeof address === 'string') {
+        throw new Error('servidor subiu sem endereço TCP');
+      }
+      return { host: address.address, port: address.port };
+    },
+
+    async close(): Promise<void> {
+      // Antes de `fastify.close()`, não dentro do hook: quando o hook roda, o
+      // servidor HTTP já está drenando e a conexão aberta já o está segurando.
+      io.local.disconnectSockets(true);
+      io.engine.close();
+      await fastify.close();
+    },
+  };
+}
