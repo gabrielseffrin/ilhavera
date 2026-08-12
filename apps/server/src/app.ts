@@ -10,7 +10,7 @@ import { Server as IOServer } from 'socket.io';
 
 import type { Config } from './config.js';
 import { PlayerDirectory } from './identity/players.js';
-import { registerRoomHandlers } from './protocol/rooms.js';
+import { registerHandlers } from './protocol/connection.js';
 import type { GameServer } from './protocol/types.js';
 import { RoomRegistry, type RoomRegistryOptions } from './rooms/registry.js';
 
@@ -77,7 +77,7 @@ export function buildServer(config: Config, options: BuildOptions = {}): AppServ
     rooms: rooms.size,
   }));
 
-  registerRoomHandlers(io, { players, rooms, log: fastify.log });
+  registerHandlers(io, { players, rooms, log: fastify.log });
 
   /** Rede de segurança para quem chamar `fastify.close()` sem passar por `close()`. */
   fastify.addHook('onClose', (_instance, done) => {
