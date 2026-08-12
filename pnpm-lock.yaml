@@ -64,6 +64,9 @@ importers:
       '@types/node':
         specifier: ^22.10.6
         version: 22.20.1
+      '@vitest/coverage-v8':
+        specifier: ^2.1.8
+        version: 2.1.9(vitest@2.1.9(@types/node@22.20.1))
       socket.io-client:
         specifier: ^4.8.3
         version: 4.8.3
