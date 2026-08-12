@@ -9,18 +9,29 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { Server as IOServer } from 'socket.io';
 
 import type { Config } from './config.js';
+import { PlayerDirectory } from './identity/players.js';
+import { registerRoomHandlers } from './protocol/rooms.js';
+import type { GameServer } from './protocol/types.js';
+import { RoomRegistry, type RoomRegistryOptions } from './rooms/registry.js';
 
 export type Address = { host: string; port: number };
 
 export type AppServer = {
   readonly fastify: FastifyInstance;
-  readonly io: IOServer;
+  readonly io: GameServer;
+  readonly players: PlayerDirectory;
+  readonly rooms: RoomRegistry;
   /** Sobe e devolve o endereço real — que difere do pedido quando `PORT` é 0. */
   listen(): Promise<Address>;
   close(): Promise<void>;
 };
 
-export function buildServer(config: Config): AppServer {
+export type BuildOptions = {
+  /** Injetável para o teste fixar semente e relógio e obter partida reproduzível. */
+  registry?: RoomRegistryOptions;
+};
+
+export function buildServer(config: Config, options: BuildOptions = {}): AppServer {
   const fastify = Fastify({
     logger: { level: config.LOG_LEVEL },
     /**
@@ -37,10 +48,13 @@ export function buildServer(config: Config): AppServer {
     forceCloseConnections: true,
   });
 
-  const io = new IOServer(fastify.server, {
+  const io: GameServer = new IOServer(fastify.server, {
     serveClient: false,
     cors: { origin: config.CORS_ORIGIN },
   });
+
+  const players = new PlayerDirectory();
+  const rooms = new RoomRegistry(options.registry ?? {});
 
   /**
    * A raiz existe para quem abre `localhost:3000` no navegador e precisa
@@ -60,15 +74,10 @@ export function buildServer(config: Config): AppServer {
     status: 'ok',
     uptime: Math.round(process.uptime()),
     sockets: io.engine.clientsCount,
+    rooms: rooms.size,
   }));
 
-  io.on('connection', (socket) => {
-    fastify.log.debug({ socketId: socket.id }, 'socket conectado');
-
-    socket.on('disconnect', (reason) => {
-      fastify.log.debug({ socketId: socket.id, reason }, 'socket desconectado');
-    });
-  });
+  registerRoomHandlers(io, { players, rooms, log: fastify.log });
 
   /** Rede de segurança para quem chamar `fastify.close()` sem passar por `close()`. */
   fastify.addHook('onClose', (_instance, done) => {
@@ -80,6 +89,8 @@ export function buildServer(config: Config): AppServer {
   return {
     fastify,
     io,
+    players,
+    rooms,
 
     async listen(): Promise<Address> {
       await fastify.listen({ port: config.PORT, host: config.HOST });

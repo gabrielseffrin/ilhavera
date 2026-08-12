@@ -1,5 +1,5 @@
 /**
- * Sobe um servidor de verdade numa porta efêmera e devolve o endereço.
+ * Sobe um servidor de verdade numa porta efêmera e devolve clientes prontos.
  *
  * Porta efêmera em vez de fixa porque os arquivos de teste compartilham a
  * máquina do CI; porta fixa transforma dois testes simultâneos num
@@ -8,17 +8,33 @@
 
 import { io as connect, type Socket } from 'socket.io-client';
 
-import { buildServer, type AppServer } from '../../src/app.js';
+import type { Ack, CommandName } from '@ilhavera/protocol';
+
+import { buildServer, type AppServer, type BuildOptions } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
+
+/** Um cliente com açúcar para o padrão comando-com-ack da §5.1. */
+export type Client = {
+  socket: Socket;
+  /** O token que o servidor emitiu no `session:issued`, se emitiu. */
+  token: string | null;
+  playerId: string | null;
+  send<T = unknown>(command: CommandName, payload?: Record<string, unknown>): Promise<Ack<T>>;
+  /** Espera o próximo evento com esse nome, ou estoura o prazo. */
+  next<T = unknown>(event: string, timeoutMs?: number): Promise<T>;
+  disconnect(): void;
+};
 
 export type TestServer = {
   server: AppServer;
   url: string;
-  connect(): Promise<Socket>;
+  connect(token?: string): Promise<Client>;
   close(): Promise<void>;
 };
 
-export async function startTestServer(): Promise<TestServer> {
+let contadorDeRequisicao = 0;
+
+export async function startTestServer(options: BuildOptions = {}): Promise<TestServer> {
   const config = loadConfig({
     PORT: '0',
     HOST: '127.0.0.1',
@@ -26,19 +42,71 @@ export async function startTestServer(): Promise<TestServer> {
     LOG_LEVEL: 'silent',
   });
 
-  const server = buildServer(config);
+  const server = buildServer(config, options);
   const { port } = await server.listen();
   const url = `http://127.0.0.1:${port}`;
 
-  const clientes: Socket[] = [];
+  const clientes: Client[] = [];
 
   return {
     server,
     url,
 
-    async connect(): Promise<Socket> {
-      const socket = connect(url, { transports: ['websocket'], reconnection: false });
-      clientes.push(socket);
+    async connect(token?: string): Promise<Client> {
+      const socket = connect(url, {
+        transports: ['websocket'],
+        reconnection: false,
+        ...(token === undefined ? {} : { auth: { token } }),
+      });
+
+      const cliente: Client = {
+        socket,
+        token: null,
+        playerId: null,
+
+        async send<T = unknown>(
+          command: CommandName,
+          payload: Record<string, unknown> = {},
+        ): Promise<Ack<T>> {
+          const requestId = `req-${++contadorDeRequisicao}`;
+          return new Promise<Ack<T>>((resolve, reject) => {
+            const prazo = setTimeout(() => {
+              reject(new Error(`sem ack para ${command} em 3s`));
+            }, 3000);
+
+            socket.emit(command, { requestId, ...payload }, (resposta: Ack<T>) => {
+              clearTimeout(prazo);
+              resolve(resposta);
+            });
+          });
+        },
+
+        async next<T = unknown>(event: string, timeoutMs = 3000): Promise<T> {
+          return new Promise<T>((resolve, reject) => {
+            const prazo = setTimeout(() => {
+              socket.off(event, aoReceber);
+              reject(new Error(`evento ${event} não chegou em ${timeoutMs}ms`));
+            }, timeoutMs);
+
+            function aoReceber(dados: T): void {
+              clearTimeout(prazo);
+              resolve(dados);
+            }
+
+            socket.once(event, aoReceber);
+          });
+        },
+
+        disconnect(): void {
+          socket.disconnect();
+        },
+      };
+
+      // A identidade chega logo depois do connect, e só para quem é novo.
+      socket.on('session:issued', (dados: { playerId: string; token: string }) => {
+        cliente.token = dados.token;
+        cliente.playerId = dados.playerId;
+      });
 
       await new Promise<void>((resolve, reject) => {
         socket.once('connect', () => {
@@ -49,11 +117,16 @@ export async function startTestServer(): Promise<TestServer> {
         });
       });
 
-      return socket;
+      // `session:issued` sai no mesmo tick do connect no servidor, mas chega no
+      // cliente logo depois; um respiro evita teste sensível a ordem de rede.
+      await new Promise((r) => setTimeout(r, 25));
+
+      clientes.push(cliente);
+      return cliente;
     },
 
     async close(): Promise<void> {
-      for (const socket of clientes) socket.disconnect();
+      for (const cliente of clientes) cliente.disconnect();
       await server.close();
     },
   };

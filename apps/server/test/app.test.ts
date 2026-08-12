@@ -73,8 +73,8 @@ describe('ciclo de vida', () => {
   it('aceita conexão de socket e a contabiliza no health', async () => {
     atual = await startTestServer();
 
-    const socket = await atual.connect();
-    expect(socket.connected).toBe(true);
+    const cliente = await atual.connect();
+    expect(cliente.socket.connected).toBe(true);
 
     const resposta = await atual.server.fastify.inject({ method: 'GET', url: '/health' });
     expect(resposta.json()).toMatchObject({ sockets: 1 });
