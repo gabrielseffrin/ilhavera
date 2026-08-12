@@ -21,6 +21,13 @@ const ENV = z.object({
    * navegador recusa o handshake do Socket.IO sem dizer por quê.
    */
   CORS_ORIGIN: z.string().min(1).default('*'),
+  /**
+   * Sem banco o servidor sobe e joga; só não sobrevive ao próprio reinício.
+   * Fica opcional de propósito: `make play` e o desenvolvimento do cliente na
+   * Fase 3 não deveriam exigir Postgres para existir. Em produção é obrigatório
+   * na prática, e a ausência aparece no log da subida.
+   */
+  DATABASE_URL: z.string().min(1).optional(),
 });
 
 export type Config = z.infer<typeof ENV>;

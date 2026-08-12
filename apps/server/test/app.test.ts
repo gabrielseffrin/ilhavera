@@ -119,9 +119,15 @@ describe('configuração', () => {
   });
 
   it('ignora variáveis que não são do servidor', () => {
-    const config = loadConfig({ DATABASE_URL: 'postgres://x', PORT: '4000' });
+    const config = loadConfig({ REDIS_URL: 'redis://x', PORT: '4000' });
 
     expect(config.PORT).toBe(4000);
-    expect(config).not.toHaveProperty('DATABASE_URL');
+    expect(config).not.toHaveProperty('REDIS_URL');
+  });
+
+  it('lê DATABASE_URL, e a ausência dela é válida', () => {
+    expect(loadConfig({ DATABASE_URL: 'postgres://x' }).DATABASE_URL).toBe('postgres://x');
+    // Sem banco o servidor sobe e joga; só não sobrevive ao próprio reinício.
+    expect(loadConfig({}).DATABASE_URL).toBeUndefined();
   });
 });

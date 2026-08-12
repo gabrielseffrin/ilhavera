@@ -588,11 +588,26 @@ Os sub-marcos M1–M7 abaixo são a ordem em que a fase é entregue, e aparecem 
 - [x] **M3** — `GameRoom`: estado vivo, fila de comandos serializada por sala — `src/game/room.ts` (idempotência por `${playerId}:${requestId}`, com o ack anterior repetido verbatim)
 - [x] **M3** — Validação de payload com zod na borda — `src/protocol/handle.ts`, tradução comando→ação em `packages/protocol/src/actions.ts`
 - [x] **M4** — Broadcast de `state:patch` + `state:snapshot` — `src/protocol/game.ts` (emitidos **por jogador**, sempre pela projeção; nunca `io.to(code)` com estado cru)
-- [ ] **M5** — Persistência: snapshots + `game_actions`
+- [x] **M5** — Persistência: snapshots + `game_actions` — `src/persistence/` (porta com dois adaptadores; migração Drizzle aplicada no boot; restauração por snapshot + replay)
 - [ ] **M6** — Reconexão com resync (`state:resync` ainda não existe; hoje a reconexão recebe `state:snapshot` inteiro)
 - [ ] **M7** — Rate limit por socket
 - **Aceite:** dois clientes de teste (scripts Node) jogam uma partida completa via WebSocket; matar o servidor no meio e subir de novo restaura a partida
-  - Parcial em 12/08/2026: três clientes completam o **setup** inteiro por WebSocket em `apps/server/test/game.test.ts`. Falta a partida completa e a restauração, que dependem da M5.
+  - ✅ **restauração** (12/08/2026): `apps/server/test/restore.test.ts` mata o servidor no meio, sobe outro do mesmo banco e a mesa termina o setup pela rede. Roda contra as duas lojas — só o Postgres prova que o estado atravessa o JSONB.
+  - Parcial: os clientes de teste completam o **setup** (12 jogadas), não a partida inteira. Falta a partida completa, que depende de rolagem de dados e comércio pela rede — nada de novo no servidor, só extensão do roteiro de teste.
+
+#### O que a M5 grava, e quando
+
+| Momento                                    | Escrita                   | Esperada?                            |
+| ------------------------------------------ | ------------------------- | ------------------------------------ |
+| emissão de token                           | `players`                 | não — o handshake não espera o banco |
+| `room:create` / `join` / `leave` / `start` | `rooms` + `room_players`  | não                                  |
+| criação da partida                         | `game_snapshots` versão 0 | não                                  |
+| jogada aceita                              | `game_actions`            | **sim**, antes do ack                |
+| fim de turno                               | `game_snapshots`          | **sim**, junto da ação               |
+
+Só as escritas da partida são esperadas — era para isso que a fila da M3 existia. As demais são disparadas em segundo plano, com a rejeição tratada: perder o servidor porque o `UPDATE` de um apelido falhou seria trocar arranhão por amputação. Falha de gravação **não** desfaz a jogada; ela já aconteceu no motor e os outros jogadores já a viram no `state:patch`.
+
+`PlayerState.connected` fica fora do banco de propósito: é estado de runtime, e gravar a cada desconexão daria tempestade de escrita sem nada em troca. Quem volta de um reinício volta como desconectado, e a primeira reconexão corrige.
 
 Fora do escopo desta fase, por decisão: chat na sala (Fase 5) e a expiração de salas do ADR-003 — `Room.lastActivityAt` é escrito e ainda não é lido.
 
