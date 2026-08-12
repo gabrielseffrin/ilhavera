@@ -42,6 +42,20 @@ export function buildServer(config: Config): AppServer {
     cors: { origin: config.CORS_ORIGIN },
   });
 
+  /**
+   * A raiz existe para quem abre `localhost:3000` no navegador e precisa
+   * descobrir o que este processo é. Sem ela, a primeira coisa que o projeto
+   * mostra a alguém é um 404 cru — e o cliente de verdade só chega na Fase 3.
+   */
+  fastify.get('/', () => ({
+    service: 'ilhavera',
+    message: 'Servidor de jogo. A partida acontece por WebSocket, não por HTTP.',
+    endpoints: {
+      health: '/health',
+      socket: '/socket.io/',
+    },
+  }));
+
   fastify.get('/health', () => ({
     status: 'ok',
     uptime: Math.round(process.uptime()),

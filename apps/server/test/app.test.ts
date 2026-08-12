@@ -11,6 +11,32 @@ afterEach(async () => {
   atual = null;
 });
 
+describe('raiz', () => {
+  it('diz o que o processo é em vez de devolver 404', async () => {
+    const server = buildServer(loadConfig({ LOG_LEVEL: 'silent' }));
+
+    const resposta = await server.fastify.inject({ method: 'GET', url: '/' });
+
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json()).toMatchObject({
+      service: 'ilhavera',
+      endpoints: { health: '/health' },
+    });
+
+    await server.close();
+  });
+
+  it('ainda devolve 404 em rota que não existe', async () => {
+    const server = buildServer(loadConfig({ LOG_LEVEL: 'silent' }));
+
+    const resposta = await server.fastify.inject({ method: 'GET', url: '/nao-existe' });
+
+    expect(resposta.statusCode).toBe(404);
+
+    await server.close();
+  });
+});
+
 describe('health check', () => {
   it('responde ok sem precisar de porta aberta', async () => {
     const server = buildServer(loadConfig({ LOG_LEVEL: 'silent' }));
