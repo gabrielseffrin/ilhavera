@@ -30,8 +30,26 @@ export const TRADE_RESPONSE = z.discriminatedUnion('type', [
   z.object({ type: z.literal('counter'), terms: TRADE_TERMS }),
 ]);
 
-const NICKNAME = z.string().min(1).max(24);
-const ROOM_CODE = z.string().length(6);
+const NICKNAME = z.string().trim().min(1).max(24);
+
+/**
+ * Código de sala: 6 caracteres de um alfabeto sem `0/O` nem `1/I/L`, porque o
+ * código é ditado em voz alta ou copiado de uma mensagem. Aceita minúsculas na
+ * entrada e normaliza — quem digita não deve precisar saber disso.
+ */
+const ROOM_CODE = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .pipe(z.string().regex(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/, 'código de sala inválido'));
+
+/** Ajustes de partida que o host escolhe ao criar a sala. */
+export const ROOM_SETTINGS = z.object({
+  targetVictoryPoints: z.number().int().min(3).max(20).default(10),
+  boardMode: z.enum(['balanced', 'random']).default('balanced'),
+});
+
+export type RoomSettings = z.infer<typeof ROOM_SETTINGS>;
 
 /**
  * Comandos cliente → servidor (§5.1). Todo comando carrega `requestId` para
@@ -39,7 +57,7 @@ const ROOM_CODE = z.string().length(6);
  * aplicou aquilo.
  */
 export const COMMANDS = {
-  'room:create': z.object({ nickname: NICKNAME, settings: z.record(z.unknown()).optional() }),
+  'room:create': z.object({ nickname: NICKNAME, settings: ROOM_SETTINGS.default({}) }),
   'room:join': z.object({ code: ROOM_CODE, nickname: NICKNAME }),
   'room:leave': z.object({}),
   'room:start': z.object({}),
@@ -68,10 +86,18 @@ export const COMMANDS = {
 
 export type CommandName = keyof typeof COMMANDS;
 
+/** Payload já validado de um comando — o que o handler do servidor recebe. */
+export type CommandPayload<K extends CommandName> = z.infer<(typeof COMMANDS)[K]>;
+
 export const ENVELOPE = z.object({ requestId: z.string().min(1) });
 
 /** Eventos servidor → cliente (§5.2). */
 export const SERVER_EVENTS = [
+  /**
+   * Fora da §5.2, acrescentado na Fase 2: o servidor emite a identidade recém
+   * criada para o cliente guardar. Só chega a quem conectou sem token válido.
+   */
+  'session:issued',
   'state:snapshot',
   'state:patch',
   'game:event',
@@ -82,7 +108,32 @@ export const SERVER_EVENTS = [
 
 export type ServerEventName = (typeof SERVER_EVENTS)[number];
 
-export type Ack = { ok: true } | { ok: false; error: string };
+/**
+ * Erros de sala — a camada de fora do motor. Os `ErrorCode` de `@ilhavera/rules`
+ * cobrem jogada inválida; estes cobrem "essa sala não existe" e "você não é o
+ * host", que são decisões do servidor e não do jogo.
+ */
+export const ROOM_ERROR_CODES = [
+  'BAD_PAYLOAD',
+  'ROOM_NOT_FOUND',
+  'ROOM_FULL',
+  'ROOM_ALREADY_STARTED',
+  'ROOM_NOT_STARTED',
+  'NOT_HOST',
+  'NOT_ENOUGH_PLAYERS',
+  'ALREADY_IN_ROOM',
+  'NOT_IN_ROOM',
+  'NICKNAME_TAKEN',
+] as const;
+
+export type RoomErrorCode = (typeof ROOM_ERROR_CODES)[number];
+
+/**
+ * Resposta de comando. Carrega `data` porque `room:create` precisa devolver o
+ * código sorteado — sem isso o cliente teria que esperar um broadcast para
+ * saber em que sala entrou.
+ */
+export type Ack<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
 
 /**
  * Valida o payload de um comando. É a borda de §5.1 — nada entra no motor sem
