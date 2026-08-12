@@ -252,17 +252,21 @@ export class RoomRegistry {
     if (room.status !== 'lobby') return { ok: false, error: 'ROOM_ALREADY_STARTED' };
     if (room.seats.length < MIN_PLAYERS) return { ok: false, error: 'NOT_ENOUGH_PLAYERS' };
 
+    room.status = 'playing';
+    this.#touch(room);
+    // Antes de criar a partida: as ações e o snapshot têm chave estrangeira
+    // para a sala, e a fila garante que este `INSERT` assenta primeiro.
+    this.#gravar(room);
+
     room.game = GameRoom.create({
       id: room.id,
       seed: this.#makeSeed(),
       players: room.seats.map((s) => ({ id: s.playerId, name: s.nickname, color: s.color })),
       settings: room.settings,
+      store: this.#store,
+      writes: this.#writes,
+      onWriteError: this.#onWriteError,
     });
-    room.status = 'playing';
-    this.#touch(room);
-    // Antes de qualquer jogada: as ações têm chave estrangeira para a sala, e
-    // gravar ação de sala que ainda não existe é violação de integridade.
-    this.#gravar(room);
 
     return { ok: true, value: room };
   }

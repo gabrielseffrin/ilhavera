@@ -11,6 +11,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { enumerateLegalActions, type Action, type GameEvent } from '@ilhavera/rules';
 
 import { GameRoom } from '../src/game/room.js';
+import { MemoryStore } from '../src/persistence/memory.js';
+
+const SALA_ID = 'sala-1';
 
 const JOGADORES = [
   { id: 'ana', name: 'Ana', color: 'red' as const },
@@ -20,7 +23,7 @@ const JOGADORES = [
 
 function novaPartida(maxRequestLog?: number): GameRoom {
   return GameRoom.create({
-    id: 'sala-1',
+    id: SALA_ID,
     seed: 'semente-de-teste',
     players: JOGADORES,
     settings: { targetVictoryPoints: 10, boardMode: 'balanced' },
@@ -223,6 +226,95 @@ describe('GameRoom: fila e conexão', () => {
     expect(Object.isFrozen(room.state)).toBe(true);
     expect(() => room.setConnected('carla', false)).not.toThrow();
     expect(room.state.players.find((p) => p.id === 'carla')?.connected).toBe(false);
+  });
+});
+
+describe('GameRoom: diário da partida', () => {
+  /** Uma sala com loja de verdade, para conferir o que foi gravado. */
+  function comLoja(): { room: GameRoom; store: MemoryStore } {
+    const store = new MemoryStore();
+    const room = GameRoom.create({
+      id: SALA_ID,
+      seed: 'semente-de-teste',
+      players: JOGADORES,
+      settings: { targetVictoryPoints: 10, boardMode: 'balanced' },
+      shufflePlayerOrder: false,
+      store,
+    });
+    return { room, store };
+  }
+
+  it('grava o snapshot da versão 0 ao criar — é dele que a restauração parte', async () => {
+    const { store } = comLoja();
+    // A gravação inicial é enfileirada sem `await`.
+    await new Promise((r) => setTimeout(r, 10));
+
+    const snapshot = await store.loadLatestSnapshot(SALA_ID);
+    expect(snapshot?.version).toBe(0);
+    expect(snapshot?.state.seed).toBe('semente-de-teste');
+  });
+
+  it('a jogada está no banco quando o ack sai', async () => {
+    const { room, store } = comLoja();
+    const acao = jogadaLegal(room);
+
+    await room.submit({ playerId: acao.player, requestId: 'r1', action: acao });
+
+    // Sem espera nenhuma: `submit` só resolve depois de gravar.
+    const gravadas = await store.loadActionsAfter(SALA_ID, 0);
+    expect(gravadas).toHaveLength(1);
+    expect(gravadas[0]?.seq).toBe(1);
+    expect(gravadas[0]?.action).toEqual(acao);
+  });
+
+  it('jogada recusada não vira linha no diário', async () => {
+    const { room, store } = comLoja();
+    const acao = jogadaLegal(room);
+    const outro = JOGADORES.find((j) => j.id !== acao.player);
+    if (outro === undefined) throw new Error('mesa de um jogador só');
+
+    await room.submit({
+      playerId: outro.id,
+      requestId: 'r1',
+      action: { ...acao, player: outro.id },
+    });
+
+    expect(await store.loadActionsAfter(SALA_ID, 0)).toHaveLength(0);
+  });
+
+  it('reenvio deduplicado não grava a mesma jogada duas vezes', async () => {
+    const { room, store } = comLoja();
+    const acao = jogadaLegal(room);
+    const entrada = { playerId: acao.player, requestId: 'r1', action: acao };
+
+    await room.submit(entrada);
+    await room.submit(entrada);
+
+    expect(await store.loadActionsAfter(SALA_ID, 0)).toHaveLength(1);
+  });
+
+  it('falha de gravação não desfaz a jogada nem derruba a partida', async () => {
+    const store = new MemoryStore();
+    const erros: string[] = [];
+    const room = GameRoom.create({
+      id: SALA_ID,
+      seed: 'semente-de-teste',
+      players: JOGADORES,
+      settings: { targetVictoryPoints: 10, boardMode: 'balanced' },
+      shufflePlayerOrder: false,
+      store,
+      onWriteError: (_erro, contexto) => erros.push(contexto),
+    });
+
+    store.appendAction = (): Promise<void> => Promise.reject(new Error('banco caiu'));
+
+    const acao = jogadaLegal(room);
+    const { ack } = await room.submit({ playerId: acao.player, requestId: 'r1', action: acao });
+
+    // A jogada aconteceu: mentir no ack seria pior que perder o diário.
+    expect(ack).toEqual({ ok: true, data: { version: 1 } });
+    expect(room.version).toBe(1);
+    expect(erros).toContain('gravarJogada');
   });
 });
 

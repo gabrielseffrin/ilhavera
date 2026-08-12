@@ -123,6 +123,27 @@ describe('persistência: salas', () => {
     expect(await store.loadRooms('playing')).toHaveLength(1);
   });
 
+  it('o snapshot inicial guarda a semente, que a tabela de salas não tem', async () => {
+    const { s, store } = await servidor();
+    const host = await s.connect();
+    const ack = await host.send<RoomView>('room:create', { nickname: 'Ana' });
+    if (!ack.ok) throw new Error('falhou ao criar');
+
+    for (const nome of ['Bruno', 'Carla']) {
+      const cliente = await s.connect();
+      await cliente.send('room:join', { code: ack.data.code, nickname: nome });
+    }
+    await host.send('room:start');
+    await assentar();
+
+    const [sala] = await store.loadRooms('playing');
+    const snapshot = await store.loadLatestSnapshot(sala?.id ?? '');
+
+    expect(snapshot?.version).toBe(0);
+    expect(snapshot?.state.seed).toBe('semente-de-teste');
+    expect(snapshot?.state.phase).toBe('setup1');
+  });
+
   it('lobby que esvaziou sai do banco', async () => {
     const { s, store } = await servidor();
     const cliente = await s.connect();
