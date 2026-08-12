@@ -110,15 +110,31 @@ function publicPlayer(state: GameState, id: PlayerId): PublicPlayerView {
 }
 
 /**
- * Filtra o log. Hoje a única informação oculta em evento é qual recurso foi
+ * Filtra um evento. Hoje a única informação oculta em evento é qual recurso foi
  * roubado; ladrão e vítima veem, o resto da mesa só vê que houve roubo.
  */
-function projectEvent(event: GameEvent, viewerId: PlayerId | null): GameEvent {
+export function projectEvent(event: GameEvent, viewerId: PlayerId | null): GameEvent {
   if (event.type !== 'stolen') return event;
   if (viewerId !== null && (viewerId === event.actor || viewerId === event.data.from)) {
     return event;
   }
   return { ...event, data: { from: event.data.from, resource: null } };
+}
+
+/**
+ * Filtra uma leva de eventos para um espectador.
+ *
+ * Existe para o `state:patch` do servidor (§5.2): o `reduce` devolve os eventos
+ * crus da ação, e mandá-los para a sala inteira vazaria o roubo — o mesmo
+ * descuido contra o qual o cabeçalho deste arquivo avisa, só que pelo canal do
+ * delta em vez do canal do estado. Quem emite estado passa por aqui ou por
+ * `toClientView`, nunca direto.
+ */
+export function projectEvents(
+  events: readonly GameEvent[],
+  viewerId: PlayerId | null,
+): GameEvent[] {
+  return events.map((e) => projectEvent(e, viewerId));
 }
 
 export function toClientView(state: GameState, viewerId: PlayerId | null): ClientView {
@@ -160,6 +176,6 @@ export function toClientView(state: GameState, viewerId: PlayerId | null): Clien
     devCardPlayedThisTurn: state.devCardPlayedThisTurn,
     lastRoll: state.lastRoll === null ? null : { ...state.lastRoll },
     winner: state.winner,
-    log: state.log.map((e) => projectEvent(e, viewerId)),
+    log: projectEvents(state.log, viewerId),
   };
 }

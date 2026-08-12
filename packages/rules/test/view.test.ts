@@ -12,7 +12,8 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 
-import { toClientView } from '../src/view.js';
+import { projectEvents, toClientView } from '../src/view.js';
+import { reduce } from '../src/reduce.js';
 import { victoryPoints } from '../src/scoring/victory.js';
 import { playRandomGame } from './helpers/driver.js';
 import {
@@ -25,7 +26,7 @@ import {
   patch,
 } from './helpers/setup.js';
 import { clearBuildingsOnHex, hexVertices, placeBuilding } from './helpers/board.js';
-import type { GameState } from '../src/state.js';
+import type { GameEvent, GameState } from '../src/state.js';
 
 /** Percorre o JSON e devolve todos os valores primitivos encontrados. */
 function todosOsValores(value: unknown, out: unknown[] = []): unknown[] {
@@ -144,6 +145,56 @@ describe('toClientView: informação oculta', () => {
     for (const p of view.players) {
       expect(p).not.toHaveProperty('resources');
     }
+  });
+});
+
+describe('projectEvents: a mesma fronteira, no canal do delta', () => {
+  /** Monta um roubo de minério de `ana` em `bruno` e devolve os eventos crus. */
+  function eventosDeUmRoubo(): readonly GameEvent[] {
+    let s = completeSetup(newGame());
+    for (const p of s.players) s = clearHand(s, p.id);
+
+    const hexId = s.board.hexOrder.find((h) => h !== s.robberHex)!;
+    s = clearBuildingsOnHex(s, hexId);
+    s = placeBuilding(s, 'bruno', hexVertices(s, hexId)[0]!, 'settlement');
+    s = grant(s, 'bruno', { ore: 2 });
+    s = patch(s, (draft) => {
+      draft.phase = 'movingRobber';
+      draft.robberReturnPhase = 'main';
+    });
+
+    const resultado = reduce(s, { type: 'moveRobber', player: 'ana', hexId, stealFrom: 'bruno' });
+    if (!resultado.ok) throw new Error(`roubo rejeitado: ${resultado.error}`);
+    return resultado.events;
+  }
+
+  it('mascara o recurso roubado para quem não é ladrão nem vítima', () => {
+    const eventos = eventosDeUmRoubo();
+    const roubo = (id: string | null) =>
+      projectEvents(eventos, id).find((e) => e.type === 'stolen') as
+        { data: { from: string; resource: string | null } } | undefined;
+
+    expect(roubo('ana')!.data.resource).toBe('ore');
+    expect(roubo('bruno')!.data.resource).toBe('ore');
+    expect(roubo('carla')!.data.resource).toBeNull();
+    expect(roubo(null)!.data.resource).toBeNull();
+    // Que houve roubo, e de quem, continua público — só o recurso some.
+    expect(roubo('carla')!.data.from).toBe('bruno');
+  });
+
+  it('não altera os eventos sem informação oculta', () => {
+    const eventos = eventosDeUmRoubo();
+    const outros = eventos.filter((e) => e.type !== 'stolen');
+    expect(outros.length).toBeGreaterThan(0);
+
+    const projetados = projectEvents(eventos, 'carla').filter((e) => e.type !== 'stolen');
+    expect(projetados).toEqual(outros);
+  });
+
+  it('preserva a ordem e a quantidade de eventos', () => {
+    const eventos = eventosDeUmRoubo();
+    const projetados = projectEvents(eventos, 'carla');
+    expect(projetados.map((e) => e.type)).toEqual(eventos.map((e) => e.type));
   });
 });
 
