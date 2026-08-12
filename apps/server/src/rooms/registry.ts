@@ -16,15 +16,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 
 import type { RoomErrorCode, RoomSettings } from '@ilhavera/protocol';
-import {
-  createGame,
-  MAX_PLAYERS,
-  MIN_PLAYERS,
-  PLAYER_COLORS,
-  type GameState,
-  type PlayerColor,
-} from '@ilhavera/rules';
+import { MAX_PLAYERS, MIN_PLAYERS, PLAYER_COLORS, type PlayerColor } from '@ilhavera/rules';
 
+import { GameRoom } from '../game/room.js';
 import type { PlayerId } from '../identity/players.js';
 import { generateUniqueRoomCode } from './code.js';
 
@@ -44,8 +38,8 @@ export type Room = {
   status: RoomStatus;
   seats: Seat[];
   settings: RoomSettings;
-  /** `null` enquanto a sala está em lobby. */
-  game: GameState | null;
+  /** `null` enquanto a sala está em lobby. Depois de `start`, o dono do estado vivo. */
+  game: GameRoom | null;
   createdAt: number;
   lastActivityAt: number;
 };
@@ -203,7 +197,7 @@ export class RoomRegistry {
     if (room.status !== 'lobby') return { ok: false, error: 'ROOM_ALREADY_STARTED' };
     if (room.seats.length < MIN_PLAYERS) return { ok: false, error: 'NOT_ENOUGH_PLAYERS' };
 
-    room.game = createGame({
+    room.game = GameRoom.create({
       id: room.id,
       seed: this.#makeSeed(),
       players: room.seats.map((s) => ({ id: s.playerId, name: s.nickname, color: s.color })),
@@ -224,9 +218,15 @@ export class RoomRegistry {
     return room;
   }
 
+  /**
+   * O assento e o jogador do motor precisam contar a mesma história: o lobby lê
+   * o assento, a partida lê `PlayerState.connected`. Deixar os dois divergirem
+   * daria um jogador "online" na lista e "offline" no tabuleiro.
+   */
   #setSeatConnected(room: Room, playerId: PlayerId, connected: boolean): void {
     const seat = room.seats.find((s) => s.playerId === playerId);
     if (seat !== undefined) seat.connected = connected;
+    room.game?.setConnected(playerId, connected);
   }
 
   #touch(room: Room): void {

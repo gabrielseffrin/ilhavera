@@ -19,7 +19,12 @@ export type Client = {
   /** O token que o servidor emitiu no `session:issued`, se emitiu. */
   token: string | null;
   playerId: string | null;
-  send<T = unknown>(command: CommandName, payload?: Record<string, unknown>): Promise<Ack<T>>;
+  /** `requestId` explícito só quando o teste quer simular reenvio. */
+  send<T = unknown>(
+    command: CommandName,
+    payload?: Record<string, unknown>,
+    requestId?: string,
+  ): Promise<Ack<T>>;
   /** Espera o próximo evento com esse nome, ou estoura o prazo. */
   next<T = unknown>(event: string, timeoutMs?: number): Promise<T>;
   disconnect(): void;
@@ -67,8 +72,9 @@ export async function startTestServer(options: BuildOptions = {}): Promise<TestS
         async send<T = unknown>(
           command: CommandName,
           payload: Record<string, unknown> = {},
+          requestIdExplicito?: string,
         ): Promise<Ack<T>> {
-          const requestId = `req-${++contadorDeRequisicao}`;
+          const requestId = requestIdExplicito ?? `req-${++contadorDeRequisicao}`;
           return new Promise<Ack<T>>((resolve, reject) => {
             const prazo = setTimeout(() => {
               reject(new Error(`sem ack para ${command} em 3s`));

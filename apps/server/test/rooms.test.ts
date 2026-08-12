@@ -258,8 +258,8 @@ describe('room:start', () => {
     expect(ack.data.status).toBe('playing');
 
     const room = s.server.rooms.byPlayer(host.playerId ?? '');
-    expect(room?.game?.phase).toBe('setup1');
-    expect(room?.game?.players).toHaveLength(3);
+    expect(room?.game?.state.phase).toBe('setup1');
+    expect(room?.game?.state.players).toHaveLength(3);
   });
 
   it('a partida nasce da semente injetada, então é reproduzível', async () => {
@@ -270,7 +270,7 @@ describe('room:start', () => {
     await host.send('room:start');
     const room = s.server.rooms.byPlayer(host.playerId ?? '');
 
-    expect(room?.game?.seed).toBe('semente-de-teste');
+    expect(room?.game?.state.seed).toBe('semente-de-teste');
   });
 
   it('avisa todo mundo da sala que a partida começou', async () => {
