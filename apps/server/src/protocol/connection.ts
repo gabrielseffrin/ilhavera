@@ -10,6 +10,7 @@ import type { FastifyBaseLogger } from 'fastify';
 
 import type { PlayerDirectory } from '../identity/players.js';
 import type { RoomRegistry } from '../rooms/registry.js';
+import { registerGameCommands } from './game.js';
 import { broadcastRoom, registerRoomCommands } from './rooms.js';
 import type { GameServer } from './types.js';
 
@@ -62,6 +63,7 @@ export function registerHandlers(io: GameServer, deps: HandlerDeps): void {
     log.debug({ socketId: socket.id, playerId: dados.playerId }, 'socket conectado');
 
     registerRoomCommands(socket, { io, players, rooms, log });
+    registerGameCommands(socket, { rooms, log });
 
     socket.on('disconnect', (reason) => {
       const room = rooms.setConnected(dados.playerId, false);

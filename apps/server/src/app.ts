@@ -1,8 +1,8 @@
 /**
  * Monta o servidor: Fastify para HTTP, Socket.IO para a partida.
  *
- * Nada de regra de jogo aqui — o motor entra na M3, atrás da fila por sala.
- * Neste marco o servidor só sobe, responde `/health` e aceita conexões.
+ * Nada de regra de jogo aqui: o motor vive no `GameRoom` de cada sala, atrás da
+ * fila, e só é alcançado pelos comandos de `protocol/game.ts`.
  */
 
 import Fastify, { type FastifyInstance } from 'fastify';
