@@ -14,10 +14,7 @@ import { randomInt } from '../rng.js';
 import type { Emit } from './kit.js';
 import type { ActionOf } from './types.js';
 
-export function validateDiscard(
-  state: GameState,
-  action: ActionOf<'discard'>,
-): ErrorCode | null {
+export function validateDiscard(state: GameState, action: ActionOf<'discard'>): ErrorCode | null {
   const required = state.pendingDiscards[action.player];
   if (required === undefined) return 'NOTHING_TO_DISCARD';
 

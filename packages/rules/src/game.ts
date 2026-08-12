@@ -68,7 +68,9 @@ export function createGame(options: CreateGameOptions): GameState {
   cursor = deckShuffle.cursor;
 
   const seating =
-    options.shufflePlayerOrder === false ? { items: [...players], cursor } : shuffle(seed, cursor, players);
+    options.shufflePlayerOrder === false
+      ? { items: [...players], cursor }
+      : shuffle(seed, cursor, players);
   cursor = seating.cursor;
 
   const playerStates: PlayerState[] = seating.items.map((p) => ({

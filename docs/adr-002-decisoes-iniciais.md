@@ -4,14 +4,14 @@
 - **Status:** aceito
 - **Contexto:** §11 do [roadmap](./roadmap.md)
 
-| # | Questão | Decisão | Nota |
-|---|---|---|---|
-| 1 | Máximo de jogadores no MVP | **3 a 4**, tabuleiro padrão | 19 hexágonos, 54 vértices, 72 arestas. O motor é genérico o bastante para estender depois; o tabuleiro estendido de 5–6 dobraria a superfície de teste da geração logo na fase mais crítica. |
-| 2 | Colyseus vs Socket.IO | **Socket.IO** (provisório) | Nada da Fase 1 depende disso. Revisitar com o spike de 1 dia no começo da Fase 2. |
-| 3 | Nome e identidade | **Ilhavera** | Escopo de pacotes `@ilhavera/*`. Nome próprio, sem relação com a marca registrada (§2). |
-| 4 | Hospedagem | em aberto | Decisão da Fase 6. |
-| 5 | Timer de turno | em aberto | Decisão da Fase 5. |
-| 6 | Persistência de partidas abandonadas | em aberto | Decisão da Fase 2, junto com o `GameRoom`. |
+| #   | Questão                              | Decisão                     | Nota                                                                                                                                                                                         |
+| --- | ------------------------------------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Máximo de jogadores no MVP           | **3 a 4**, tabuleiro padrão | 19 hexágonos, 54 vértices, 72 arestas. O motor é genérico o bastante para estender depois; o tabuleiro estendido de 5–6 dobraria a superfície de teste da geração logo na fase mais crítica. |
+| 2   | Colyseus vs Socket.IO                | **Socket.IO** (provisório)  | Nada da Fase 1 depende disso. Revisitar com o spike de 1 dia no começo da Fase 2.                                                                                                            |
+| 3   | Nome e identidade                    | **Ilhavera**                | Escopo de pacotes `@ilhavera/*`. Nome próprio, sem relação com a marca registrada (§2).                                                                                                      |
+| 4   | Hospedagem                           | em aberto                   | Decisão da Fase 6.                                                                                                                                                                           |
+| 5   | Timer de turno                       | em aberto                   | Decisão da Fase 5.                                                                                                                                                                           |
+| 6   | Persistência de partidas abandonadas | em aberto                   | Decisão da Fase 2, junto com o `GameRoom`.                                                                                                                                                   |
 
 ## Ambiente de desenvolvimento: tudo em container
 

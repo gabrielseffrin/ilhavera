@@ -5,7 +5,15 @@
 import { describe, expect, it } from 'vitest';
 
 import { COSTS } from '../src/types.js';
-import { apply, clearHand, completeSetup, expectError, grant, newGame, patch } from './helpers/setup.js';
+import {
+  apply,
+  clearHand,
+  completeSetup,
+  expectError,
+  grant,
+  newGame,
+  patch,
+} from './helpers/setup.js';
 import { buildTrail, findBuildableSpot, placeBuilding, placeRoads } from './helpers/board.js';
 import type { GameState } from '../src/state.js';
 
@@ -77,7 +85,11 @@ describe('construir estrada', () => {
     const meio = trilha.vertices[1]!;
     const segunda = trilha.edges[1]!;
 
-    s = placeRoads(s, 'ana', [trilha.edges[0]!].filter((e) => s.roads[e] === undefined));
+    s = placeRoads(
+      s,
+      'ana',
+      [trilha.edges[0]!].filter((e) => s.roads[e] === undefined),
+    );
     if (s.roads[segunda] !== undefined) return; // aresta já usada pelo setup
 
     // Sem adversário no meio, a segunda estrada é legal.
@@ -148,11 +160,7 @@ describe('construir assentamento', () => {
     // Ocupa um vizinho e o vértice deixa de ser legal.
     const vizinho = s.board.vertices[vertexId]!.adjacentVertices[0]!;
     s = placeBuilding(s, 'carla', vizinho, 'settlement');
-    expectError(
-      s,
-      { type: 'placeSettlement', player: 'ana', vertexId },
-      'DISTANCE_RULE_VIOLATION',
-    );
+    expectError(s, { type: 'placeSettlement', player: 'ana', vertexId }, 'DISTANCE_RULE_VIOLATION');
   });
 
   it('recusa sem recursos', () => {

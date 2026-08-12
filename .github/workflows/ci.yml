@@ -31,6 +31,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Antes do lint: diferença de formatação é ruído em toda revisão futura,
+      # e sai de graça com `pnpm format`.
+      - name: Formatação
+        run: pnpm format:check
+
       - name: Lint (inclui a regra de fronteira que protege packages/rules)
         run: pnpm lint
 

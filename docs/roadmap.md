@@ -1,4 +1,4 @@
-# Projeto: Jogo de Tabuleiro Multiplayer Online (estilo *Settlers*)
+# Projeto: Jogo de Tabuleiro Multiplayer Online (estilo _Settlers_)
 
 **Documento de especificação técnica e roadmap**
 Versão 1.0 — Agosto/2026
@@ -12,12 +12,12 @@ Construir um jogo de tabuleiro digital, jogável pelo navegador, para partidas p
 
 **Objetivos do produto**
 
-| # | Objetivo | Critério de sucesso |
-|---|---|---|
-| O1 | Partida completa jogável entre amigos, sem instalação | Uma partida de 4 jogadores termina sem travar nem exigir reload |
-| O2 | Regras corretas e não burláveis | Servidor rejeita 100% das jogadas inválidas; nenhum cliente vê informação oculta alheia |
-| O3 | Resiliência a quedas de conexão | Jogador reconecta em < 5s e recupera o estado completo |
-| O4 | Custo de operação baixo | Roda em 1 VPS pequena (2 vCPU / 4 GB) suportando ~20 partidas simultâneas |
+| #   | Objetivo                                              | Critério de sucesso                                                                     |
+| --- | ----------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| O1  | Partida completa jogável entre amigos, sem instalação | Uma partida de 4 jogadores termina sem travar nem exigir reload                         |
+| O2  | Regras corretas e não burláveis                       | Servidor rejeita 100% das jogadas inválidas; nenhum cliente vê informação oculta alheia |
+| O3  | Resiliência a quedas de conexão                       | Jogador reconecta em < 5s e recupera o estado completo                                  |
+| O4  | Custo de operação baixo                               | Roda em 1 VPS pequena (2 vCPU / 4 GB) suportando ~20 partidas simultâneas               |
 
 **Não-objetivos (fora do escopo do MVP)**
 
@@ -40,13 +40,13 @@ Regras a seguir no projeto:
 2. **Arte e ícones próprios** (ou de bibliotecas livres com licença compatível). Não reaproveitar assets do jogo original.
 3. **Terminologia própria** para os elementos temáticos. Sugestão de mapeamento:
 
-| Elemento genérico | Nome sugerido no projeto |
-|---|---|
-| Cartas de desenvolvimento | Cartas de Progresso |
-| Cavaleiro | Soldado |
-| Ladrão | Saqueador |
-| Recursos | Madeira, Tijolo, Lã, Trigo, Minério |
-| Terrenos | Floresta, Colina, Pasto, Campo, Montanha, Deserto |
+| Elemento genérico         | Nome sugerido no projeto                          |
+| ------------------------- | ------------------------------------------------- |
+| Cartas de desenvolvimento | Cartas de Progresso                               |
+| Cavaleiro                 | Soldado                                           |
+| Ladrão                    | Saqueador                                         |
+| Recursos                  | Madeira, Tijolo, Lã, Trigo, Minério               |
+| Terrenos                  | Floresta, Colina, Pasto, Campo, Montanha, Deserto |
 
 4. Projeto privado, sem distribuição comercial. Se algum dia virar público/comercial, revisar com apoio jurídico.
 
@@ -62,14 +62,14 @@ Esta seção é a especificação funcional. O motor de regras deve implementá-
 
 **Distribuição de terrenos (19):**
 
-| Terreno | Qtd | Produz |
-|---|---|---|
-| Floresta | 4 | Madeira |
-| Pasto | 4 | Lã |
-| Campo | 4 | Trigo |
-| Colina | 3 | Tijolo |
-| Montanha | 3 | Minério |
-| Deserto | 1 | — |
+| Terreno  | Qtd | Produz  |
+| -------- | --- | ------- |
+| Floresta | 4   | Madeira |
+| Pasto    | 4   | Lã      |
+| Campo    | 4   | Trigo   |
+| Colina   | 3   | Tijolo  |
+| Montanha | 3   | Minério |
+| Deserto  | 1   | —       |
 
 **Fichas numéricas (18, uma por hexágono exceto deserto):**
 `2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12`
@@ -77,6 +77,7 @@ Esta seção é a especificação funcional. O motor de regras deve implementá-
 Restrição de geração: no modo "equilibrado", **6 e 8 não podem ser adjacentes** entre si (regra oficial de balanceamento). Deve haver também um modo "aleatório puro".
 
 **Portos (9, cada um ocupando 2 vértices na borda):**
+
 - 4 portos genéricos **3:1**
 - 5 portos específicos **2:1** (um para cada recurso)
 
@@ -84,26 +85,26 @@ Restrição de geração: no modo "equilibrado", **6 e 8 não podem ser adjacent
 
 **Baralho de Cartas de Progresso (25):**
 
-| Carta | Qtd | Efeito |
-|---|---|---|
-| Soldado | 14 | Move o Saqueador e rouba 1 carta; conta para o Maior Exército |
-| Ponto de Vitória | 5 | +1 PV, permanece oculta até a vitória |
-| Construção de Estradas | 2 | Constrói 2 estradas grátis |
-| Descoberta | 2 | Pega 2 recursos quaisquer do banco |
-| Monopólio | 1..2 | Todos os jogadores entregam todas as cartas de um recurso escolhido |
+| Carta                  | Qtd  | Efeito                                                              |
+| ---------------------- | ---- | ------------------------------------------------------------------- |
+| Soldado                | 14   | Move o Saqueador e rouba 1 carta; conta para o Maior Exército       |
+| Ponto de Vitória       | 5    | +1 PV, permanece oculta até a vitória                               |
+| Construção de Estradas | 2    | Constrói 2 estradas grátis                                          |
+| Descoberta             | 2    | Pega 2 recursos quaisquer do banco                                  |
+| Monopólio              | 1..2 | Todos os jogadores entregam todas as cartas de um recurso escolhido |
 
-*(usar 2 Monopólio para totalizar 25)*
+_(usar 2 Monopólio para totalizar 25)_
 
 **Peças por jogador:** 15 estradas, 5 assentamentos, 4 cidades.
 
 **Custos:**
 
-| Construção | Custo |
-|---|---|
-| Estrada | 1 Madeira + 1 Tijolo |
-| Assentamento | 1 Madeira + 1 Tijolo + 1 Lã + 1 Trigo |
-| Cidade | 2 Trigo + 3 Minério |
-| Carta de Progresso | 1 Lã + 1 Trigo + 1 Minério |
+| Construção         | Custo                                 |
+| ------------------ | ------------------------------------- |
+| Estrada            | 1 Madeira + 1 Tijolo                  |
+| Assentamento       | 1 Madeira + 1 Tijolo + 1 Lã + 1 Trigo |
+| Cidade             | 2 Trigo + 3 Minério                   |
+| Carta de Progresso | 1 Lã + 1 Trigo + 1 Minério            |
 
 ### 3.2 Preparação (setup)
 
@@ -136,11 +137,13 @@ INÍCIO DO TURNO
 **Escassez do banco:** se o banco não tiver cartas suficientes de um recurso para atender todos os jogadores com direito, **ninguém** recebe aquele recurso — exceto se apenas um jogador tiver direito, caso em que ele recebe o que houver.
 
 **Fase do Saqueador (rolagem = 7):**
+
 1. Todo jogador com **8 ou mais cartas** de recurso descarta metade (arredondando para baixo). Descartes acontecem em paralelo; o turno só prossegue quando todos confirmarem.
 2. Jogador da vez move o Saqueador para um hexágono **diferente** do atual.
 3. Rouba 1 carta aleatória de **um** jogador com assentamento/cidade adjacente ao novo hexágono (se houver mais de um, ele escolhe).
 
 **Cartas de Progresso:**
+
 - Não podem ser jogadas no mesmo turno em que foram compradas (exceto Ponto de Vitória, que nunca é "jogada").
 - Máximo 1 por turno.
 - Cartas de Ponto de Vitória permanecem ocultas dos demais até o fim da partida.
@@ -150,7 +153,8 @@ INÍCIO DO TURNO
 **Maior Exército (2 PV):** primeiro jogador a jogar **3 Soldados**. Transfere apenas quando outro jogador tiver **estritamente mais**.
 
 **Estrada Mais Longa (2 PV):** rota contínua de **5 ou mais** segmentos de estrada do mesmo jogador. Transfere apenas com contagem estritamente maior.
-- A rota é um *trilho*: não repete arestas, mas pode repetir vértices.
+
+- A rota é um _trilho_: não repete arestas, mas pode repetir vértices.
 - Um assentamento/cidade **adversário** interrompe a rota naquele vértice.
 - Se a rota do detentor for quebrada e houver empate na nova maior rota, o bônus fica **sem dono** até que alguém desempate.
 
@@ -171,7 +175,7 @@ INÍCIO DO TURNO
 
 ### 4.1 Princípios
 
-1. **Servidor autoritativo.** O cliente nunca calcula estado válido — apenas envia *intenções* e renderiza o que recebe.
+1. **Servidor autoritativo.** O cliente nunca calcula estado válido — apenas envia _intenções_ e renderiza o que recebe.
 2. **Motor de regras puro.** Função `reduce(state, action) → { state, events }`, sem I/O, sem `Date.now()`, sem `Math.random()`. Determinístico.
 3. **RNG semeado.** Toda aleatoriedade (dados, embaralhamento, roubo) vem de um PRNG com semente armazenada. Isso permite **replay determinístico** da partida inteira a partir do log de ações.
 4. **Estado filtrado por jogador.** O servidor nunca envia informação oculta: mão dos adversários, ordem do baralho, cartas de PV alheias.
@@ -211,10 +215,17 @@ O pacote `@game/rules` é compartilhado: no **servidor** decide o que é válido
 
 ### 4.3 Representação do tabuleiro
 
-Coordenadas **axiais** `(q, r)` com hexágonos *pointy-top*. Vizinhos:
+Coordenadas **axiais** `(q, r)` com hexágonos _pointy-top_. Vizinhos:
 
 ```ts
-const DIRS = [[+1,0],[+1,-1],[0,-1],[-1,0],[-1,+1],[0,+1]];
+const DIRS = [
+  [+1, 0],
+  [+1, -1],
+  [0, -1],
+  [-1, 0],
+  [-1, +1],
+  [0, +1],
+];
 ```
 
 **Vértices:** todo vértice de uma malha hexagonal é a interseção de exatamente 3 hexágonos (alguns podem estar fora do tabuleiro, "água"). O ID canônico é a **tripla ordenada lexicograficamente** desses 3 hexágonos:
@@ -232,13 +243,16 @@ Na geração do tabuleiro, monta-se **uma vez** um grafo estático:
 ```ts
 type BoardGraph = {
   hexes: Record<HexId, { terrain: Terrain; number: number | null; vertices: VertexId[] }>;
-  vertices: Record<VertexId, {
-    hexes: HexId[];          // apenas os que estão no tabuleiro
-    adjacentVertices: VertexId[];
-    edges: EdgeId[];
-    port: PortType | null;
-    pixel: { x: number; y: number };   // pré-calculado para o SVG
-  }>;
+  vertices: Record<
+    VertexId,
+    {
+      hexes: HexId[]; // apenas os que estão no tabuleiro
+      adjacentVertices: VertexId[];
+      edges: EdgeId[];
+      port: PortType | null;
+      pixel: { x: number; y: number }; // pré-calculado para o SVG
+    }
+  >;
   edges: Record<EdgeId, { vertices: [VertexId, VertexId] }>;
 };
 ```
@@ -270,7 +284,7 @@ Cada estado define exatamente **quais ações são legais e por quem**. Toda aç
 type GameState = {
   id: string;
   seed: string;
-  rngCursor: number;             // posição do PRNG, para replay
+  rngCursor: number; // posição do PRNG, para replay
   phase: Phase;
   board: BoardGraph;
   robberHex: HexId;
@@ -278,14 +292,14 @@ type GameState = {
   turnNumber: number;
   players: PlayerState[];
   bank: Record<Resource, number>;
-  devDeck: DevCard[];            // OCULTO — nunca serializado ao cliente
+  devDeck: DevCard[]; // OCULTO — nunca serializado ao cliente
   buildings: Record<VertexId, { owner: PlayerId; type: 'settlement' | 'city' }>;
   roads: Record<EdgeId, { owner: PlayerId }>;
   largestArmy: { owner: PlayerId | null; size: number };
   longestRoad: { owner: PlayerId | null; length: number };
   pendingDiscards: Record<PlayerId, number>;
   activeTrade: TradeOffer | null;
-  freeRoadsRemaining: number;    // para carta Construção de Estradas
+  freeRoadsRemaining: number; // para carta Construção de Estradas
   devCardPlayedThisTurn: boolean;
   winner: PlayerId | null;
   log: GameEvent[];
@@ -295,7 +309,7 @@ type PlayerState = {
   id: PlayerId;
   name: string;
   color: PlayerColor;
-  resources: Record<Resource, number>;   // OCULTO para os outros (só total)
+  resources: Record<Resource, number>; // OCULTO para os outros (só total)
   devCards: { card: DevCard; boughtOnTurn: number; played: boolean }[]; // OCULTO
   knightsPlayed: number;
   piecesLeft: { roads: number; settlements: number; cities: number };
@@ -315,39 +329,39 @@ Transporte: **WebSocket** via Socket.IO (rooms + reconexão automática + fallba
 
 ### 5.1 Cliente → Servidor (comandos)
 
-| Comando | Payload |
-|---|---|
-| `room:create` | `{ nickname, settings }` |
-| `room:join` | `{ code, nickname }` |
-| `room:leave` | `{}` |
-| `room:start` | `{}` (apenas host) |
-| `game:placeSettlement` | `{ vertexId }` |
-| `game:placeRoad` | `{ edgeId }` |
-| `game:buildCity` | `{ vertexId }` |
-| `game:rollDice` | `{}` |
-| `game:discard` | `{ resources: Record<Resource, number> }` |
-| `game:moveRobber` | `{ hexId, stealFrom?: PlayerId }` |
-| `game:buyDevCard` | `{}` |
-| `game:playDevCard` | `{ card, params }` |
-| `game:tradeBank` | `{ give, receive }` |
-| `game:tradeOffer` | `{ offer, request, targets }` |
-| `game:tradeRespond` | `{ tradeId, response }` |
-| `game:tradeConfirm` | `{ tradeId, withPlayerId }` |
-| `game:endTurn` | `{}` |
-| `chat:send` | `{ text }` |
+| Comando                | Payload                                   |
+| ---------------------- | ----------------------------------------- |
+| `room:create`          | `{ nickname, settings }`                  |
+| `room:join`            | `{ code, nickname }`                      |
+| `room:leave`           | `{}`                                      |
+| `room:start`           | `{}` (apenas host)                        |
+| `game:placeSettlement` | `{ vertexId }`                            |
+| `game:placeRoad`       | `{ edgeId }`                              |
+| `game:buildCity`       | `{ vertexId }`                            |
+| `game:rollDice`        | `{}`                                      |
+| `game:discard`         | `{ resources: Record<Resource, number> }` |
+| `game:moveRobber`      | `{ hexId, stealFrom?: PlayerId }`         |
+| `game:buyDevCard`      | `{}`                                      |
+| `game:playDevCard`     | `{ card, params }`                        |
+| `game:tradeBank`       | `{ give, receive }`                       |
+| `game:tradeOffer`      | `{ offer, request, targets }`             |
+| `game:tradeRespond`    | `{ tradeId, response }`                   |
+| `game:tradeConfirm`    | `{ tradeId, withPlayerId }`               |
+| `game:endTurn`         | `{}`                                      |
+| `chat:send`            | `{ text }`                                |
 
 Todos os comandos carregam um `requestId` (idempotência) e são respondidos com `ack: { ok: true } | { ok: false, error: ErrorCode }`.
 
 ### 5.2 Servidor → Cliente (eventos)
 
-| Evento | Descrição |
-|---|---|
-| `state:snapshot` | Estado completo filtrado. Enviado ao entrar e ao reconectar |
-| `state:patch` | Delta desde a última versão (`version` incremental) |
-| `game:event` | Evento narrativo para o log/animação (`{ type, actor, data }`) |
-| `game:error` | Rejeição de comando com código e motivo |
-| `room:updated` | Jogadores, prontidão, configurações |
-| `chat:message` | Mensagem de chat |
+| Evento           | Descrição                                                      |
+| ---------------- | -------------------------------------------------------------- |
+| `state:snapshot` | Estado completo filtrado. Enviado ao entrar e ao reconectar    |
+| `state:patch`    | Delta desde a última versão (`version` incremental)            |
+| `game:event`     | Evento narrativo para o log/animação (`{ type, actor, data }`) |
+| `game:error`     | Rejeição de comando com código e motivo                        |
+| `room:updated`   | Jogadores, prontidão, configurações                            |
+| `chat:message`   | Mensagem de chat                                               |
 
 **Regra de consistência:** todo `state:patch` carrega `version`. Se o cliente detectar salto de versão, pede `state:resync` e o servidor devolve um `state:snapshot` completo.
 
@@ -361,42 +375,42 @@ Todos os comandos carregam um `requestId` (idempotência) e são respondidos com
 
 ### 6.1 Recomendação
 
-| Camada | Escolha | Justificativa |
-|---|---|---|
-| Linguagem | **TypeScript** (Node 22 LTS) | Permite **um único motor de regras compartilhado** entre servidor e cliente — o maior ganho arquitetural do projeto |
-| Monorepo | **pnpm workspaces** + Turborepo | Compartilhamento de pacotes sem publicação em registry |
-| Servidor HTTP | **Fastify** | Leve, rápido, bom suporte a TS |
-| Tempo real | **Socket.IO 4** | Rooms, reconexão, ack e adapter Redis prontos |
-| Frontend | **React 19 + Vite** | Familiaridade da equipe, HMR rápido |
-| Estado (client) | **Zustand** | Simples, sem boilerplate; ideal para snapshot + patch |
-| Estilo | **Tailwind CSS** | Velocidade de prototipação |
-| Tabuleiro | **SVG nativo em React** | 19 hexágonos + 54 vértices + 72 arestas = poucos nós no DOM. Hit-testing grátis, escalável, acessível, fácil de animar com CSS. Canvas/WebGL seria complexidade sem retorno |
-| Banco | **PostgreSQL 16** | Persistência de salas, snapshots (JSONB) e log de ações |
-| ORM | **Drizzle ORM** | Leve, type-safe, migrações versionadas |
-| Cache/pubsub | **Redis** (fase 2) | Adapter do Socket.IO para escalar horizontalmente + rate limit |
-| Testes unitários | **Vitest** | Rápido, mesma config do Vite |
-| Testes de propriedade | **fast-check** | Invariantes do motor (ver §8) |
-| E2E | **Playwright** | Simula 4 navegadores numa partida real |
-| Lint/format | **ESLint + Prettier** (ou Biome) | Padronização |
-| Container | **Docker + docker-compose** | Paridade dev/prod |
-| CI/CD | **GitHub Actions** | Build, testes, imagem, deploy com rollback |
-| Hospedagem | **VPS (Hetzner/DigitalOcean)** + Traefik ou Caddy | Custo baixo, TLS automático. Alternativa: Fly.io/Railway |
-| Observabilidade | **pino** (logs estruturados) + **Sentry** | Diagnóstico de bugs de regra em produção |
+| Camada                | Escolha                                           | Justificativa                                                                                                                                                               |
+| --------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linguagem             | **TypeScript** (Node 22 LTS)                      | Permite **um único motor de regras compartilhado** entre servidor e cliente — o maior ganho arquitetural do projeto                                                         |
+| Monorepo              | **pnpm workspaces** + Turborepo                   | Compartilhamento de pacotes sem publicação em registry                                                                                                                      |
+| Servidor HTTP         | **Fastify**                                       | Leve, rápido, bom suporte a TS                                                                                                                                              |
+| Tempo real            | **Socket.IO 4**                                   | Rooms, reconexão, ack e adapter Redis prontos                                                                                                                               |
+| Frontend              | **React 19 + Vite**                               | Familiaridade da equipe, HMR rápido                                                                                                                                         |
+| Estado (client)       | **Zustand**                                       | Simples, sem boilerplate; ideal para snapshot + patch                                                                                                                       |
+| Estilo                | **Tailwind CSS**                                  | Velocidade de prototipação                                                                                                                                                  |
+| Tabuleiro             | **SVG nativo em React**                           | 19 hexágonos + 54 vértices + 72 arestas = poucos nós no DOM. Hit-testing grátis, escalável, acessível, fácil de animar com CSS. Canvas/WebGL seria complexidade sem retorno |
+| Banco                 | **PostgreSQL 16**                                 | Persistência de salas, snapshots (JSONB) e log de ações                                                                                                                     |
+| ORM                   | **Drizzle ORM**                                   | Leve, type-safe, migrações versionadas                                                                                                                                      |
+| Cache/pubsub          | **Redis** (fase 2)                                | Adapter do Socket.IO para escalar horizontalmente + rate limit                                                                                                              |
+| Testes unitários      | **Vitest**                                        | Rápido, mesma config do Vite                                                                                                                                                |
+| Testes de propriedade | **fast-check**                                    | Invariantes do motor (ver §8)                                                                                                                                               |
+| E2E                   | **Playwright**                                    | Simula 4 navegadores numa partida real                                                                                                                                      |
+| Lint/format           | **ESLint + Prettier** (ou Biome)                  | Padronização                                                                                                                                                                |
+| Container             | **Docker + docker-compose**                       | Paridade dev/prod                                                                                                                                                           |
+| CI/CD                 | **GitHub Actions**                                | Build, testes, imagem, deploy com rollback                                                                                                                                  |
+| Hospedagem            | **VPS (Hetzner/DigitalOcean)** + Traefik ou Caddy | Custo baixo, TLS automático. Alternativa: Fly.io/Railway                                                                                                                    |
+| Observabilidade       | **pino** (logs estruturados) + **Sentry**         | Diagnóstico de bugs de regra em produção                                                                                                                                    |
 
 ### 6.2 Alternativa avaliada: Laravel + Reverb
 
 Viável e mais próxima da experiência da equipe, mas com desvantagens relevantes para **este** tipo de aplicação:
 
-| Ponto | Impacto |
-|---|---|
+| Ponto                  | Impacto                                                                                                                                                                                                                          |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Motor de regras em PHP | Impossível reaproveitar no cliente → toda validação de UI (destacar vértices jogáveis, desabilitar botões) precisa ser **reescrita em TS**, criando duas implementações que divergem com o tempo. É o principal argumento contra |
-| Estado vivo em memória | Laravel é *request/response*; manter uma partida viva exige processo separado (Octane/daemon), o que anula boa parte da conveniência do framework |
-| Reverb | Funciona bem, mas o modelo de broadcast é mais orientado a *notificação* do que a *máquina de estados com ack* |
-| Ecossistema de jogos | Muito mais material, exemplos e bibliotecas em JS/TS |
+| Estado vivo em memória | Laravel é _request/response_; manter uma partida viva exige processo separado (Octane/daemon), o que anula boa parte da conveniência do framework                                                                                |
+| Reverb                 | Funciona bem, mas o modelo de broadcast é mais orientado a _notificação_ do que a _máquina de estados com ack_                                                                                                                   |
+| Ecossistema de jogos   | Muito mais material, exemplos e bibliotecas em JS/TS                                                                                                                                                                             |
 
-**Decisão recomendada: TypeScript.** Se houver preferência forte por Laravel, o caminho é usá-lo apenas como *backoffice*/auth e manter o servidor de jogo em Node.
+**Decisão recomendada: TypeScript.** Se houver preferência forte por Laravel, o caminho é usá-lo apenas como _backoffice_/auth e manter o servidor de jogo em Node.
 
-*(Alternativa a considerar em vez de Socket.IO puro: **Colyseus**, framework de servidor autoritativo para jogos multiplayer em TS, que já entrega rooms, sincronização de estado por delta e reconexão. Reduz trabalho na Fase 2, ao custo de aderir às abstrações dele. Avaliar num spike de 1 dia.)*
+_(Alternativa a considerar em vez de Socket.IO puro: **Colyseus**, framework de servidor autoritativo para jogos multiplayer em TS, que já entrega rooms, sincronização de estado por delta e reconexão. Reduz trabalho na Fase 2, ao custo de aderir às abstrações dele. Avaliar num spike de 1 dia.)_
 
 ### 6.3 Estrutura do monorepo
 
@@ -495,11 +509,13 @@ CREATE TABLE game_results (
 O maior risco do projeto é **bug sutil de regra** que só aparece na partida 12, com quatro amigos esperando. A cobertura precisa se concentrar em `packages/rules`.
 
 **Nível 1 — Unitários do motor (meta: > 90% de cobertura no `rules`)**
+
 - Cada ação: caso feliz + todos os casos de rejeição.
 - Casos de borda catalogados: banco esgotado com múltiplos beneficiários; Estrada Mais Longa quebrada por assentamento adversário; empate no desempate de bônus; Monopólio quando ninguém tem o recurso; roubo quando o alvo tem 0 cartas; 7 rolado quando ninguém tem 8+ cartas; carta comprada e tentada no mesmo turno; vitória atingida por carta de PV oculta.
 
 **Nível 2 — Testes de propriedade (fast-check)**
 Executar milhares de partidas com ações aleatórias legais e verificar invariantes que **nunca** podem quebrar:
+
 - Conservação: `cartas no banco + cartas nas mãos = 95` (por recurso: 19).
 - `devDeck.length + cartas de progresso distribuídas = 25`.
 - Peças de cada jogador nunca excedem 15/5/4.
@@ -509,12 +525,15 @@ Executar milhares de partidas com ações aleatórias legais e verificar invaria
 - Replay do log com a mesma seed reproduz estado idêntico (hash do estado).
 
 **Nível 3 — Segurança de informação**
+
 - Teste dedicado a `toClientView`: para qualquer estado, o objeto serializado para o jogador X **não contém** as cartas de Y. Verificação por varredura recursiva do JSON.
 
 **Nível 4 — E2E (Playwright)**
+
 - Roteiro: 4 contextos de navegador criam sala, jogam setup, 3 turnos com comércio, um 7 com descarte, e um jogador é desconectado e reconecta com estado correto.
 
 **Nível 5 — Playtest com pessoas**
+
 - A partir da Fase 6, sessões reais com os amigos. Instrumentar um botão "reportar bug" que anexa `roomId` + `version` para reproduzir pelo log.
 
 ---
@@ -524,6 +543,7 @@ Executar milhares de partidas com ações aleatórias legais e verificar invaria
 Premissa de estimativa: **1 desenvolvedor, meio período (~12h/semana)**. Com dedicação integral, dividir por ~3.
 
 ### Fase 0 — Fundação (1 semana) ✅
+
 - [x] Monorepo pnpm + Turborepo, TS strict, ESLint/Prettier
 - [x] Regra de import boundaries protegendo `packages/rules` — `eslint.config.js`
 - [x] docker-compose (Postgres + Redis) para dev
@@ -532,8 +552,10 @@ Premissa de estimativa: **1 desenvolvedor, meio período (~12h/semana)**. Com de
 - **Aceite:** ✅ `pnpm test` verde. Publicado em 11/08/2026.
 
 ### Fase 1 — Motor de regras ⭐ (3–4 semanas) ✅
+
 > Fase mais crítica. Nenhuma linha de UI aqui.
-- [x] PRNG semeado + utilitários determinísticos — `src/rng.ts` (splitmix32 *counter-based*: `(seed, cursor)` puro, então um snapshot restaura por `rngCursor` sem reexecutar a sequência)
+
+- [x] PRNG semeado + utilitários determinísticos — `src/rng.ts` (splitmix32 _counter-based_: `(seed, cursor)` puro, então um snapshot restaura por `rngCursor` sem reexecutar a sequência)
 - [x] Geração do tabuleiro e construção do `BoardGraph` (54 vértices / 72 arestas — validado por teste) — `src/board/graph.ts`, `test/board.test.ts`
 - [x] Geração de números com restrição 6/8 e portos — `src/board/generate.ts` (re-shuffle determinístico; modo aleatório puro também testado)
 - [x] Máquina de estados e `reduce(state, action)` — `src/reduce.ts`, `src/actions/index.ts`
@@ -549,6 +571,7 @@ Premissa de estimativa: **1 desenvolvedor, meio período (~12h/semana)**. Com de
 - **Aceite:** ✅ partida completa jogável pelo terminal (`make play`, `make demo`); 10.000 partidas aleatórias sem violar invariantes — `make heavy` em 11/08/2026, 10 testes passando em 21min (1.259s), invariantes checados **após cada ação** de cada partida, mais mesas de 3 jogadores e modo de tabuleiro aleatório puro, mais 2.000 runs de replay determinístico
 
 ### Fase 2 — Servidor e protocolo (2 semanas)
+
 - [ ] Fastify + Socket.IO, health check
 - [ ] Identidade de jogador por token no localStorage
 - [ ] Criação/entrada em sala por código de 6 caracteres
@@ -561,6 +584,7 @@ Premissa de estimativa: **1 desenvolvedor, meio período (~12h/semana)**. Com de
 - **Aceite:** dois clientes de teste (scripts Node) jogam uma partida completa via WebSocket; matar o servidor no meio e subir de novo restaura a partida
 
 ### Fase 3 — Cliente: tabuleiro e HUD (3–4 semanas)
+
 - [ ] Layout SVG do tabuleiro com coordenadas pré-calculadas
 - [ ] Renderização de hexágonos, fichas numéricas, portos, Saqueador
 - [ ] Camadas interativas de vértices e arestas com destaque de jogadas válidas (usando `@game/rules` local)
@@ -573,6 +597,7 @@ Premissa de estimativa: **1 desenvolvedor, meio período (~12h/semana)**. Com de
 - **Aceite:** partida completa jogável em hot-seat no navegador
 
 ### Fase 4 — Integração multiplayer (2 semanas)
+
 - [ ] Trocar o motor local pelo socket como fonte de verdade
 - [ ] Tela de lobby: criar/entrar, escolher cor, host inicia
 - [ ] Indicadores de conexão por jogador
@@ -583,6 +608,7 @@ Premissa de estimativa: **1 desenvolvedor, meio período (~12h/semana)**. Com de
 - **Aceite:** 4 pessoas em máquinas diferentes concluem uma partida; um jogador fecha a aba, volta e continua
 
 ### Fase 5 — Polimento (2 semanas)
+
 - [ ] Responsividade (tablet e celular em paisagem)
 - [ ] Chat na sala
 - [ ] Timer de turno configurável + auto-passe do turno em AFK
@@ -593,6 +619,7 @@ Premissa de estimativa: **1 desenvolvedor, meio período (~12h/semana)**. Com de
 - **Aceite:** heurística de usabilidade com 4 jogadores sem precisar de explicação prévia da interface
 
 ### Fase 6 — Produção (1 semana)
+
 - [ ] Dockerfiles multi-stage
 - [ ] Deploy no VPS com Traefik/Caddy + TLS
 - [ ] Pipeline de deploy com rollback
@@ -618,16 +645,16 @@ Premissa de estimativa: **1 desenvolvedor, meio período (~12h/semana)**. Com de
 
 ## 10. Riscos e mitigações
 
-| Risco | Prob. | Impacto | Mitigação |
-|---|---|---|---|
-| Bugs sutis de regra descobertos tarde | Alta | Alto | Fase 1 isolada, testes de propriedade, log de ações para reproduzir qualquer bug |
-| Geometria de vértices/arestas mal modelada | Média | Alto | Adotar ID canônico por tripla de hexágonos; teste que exige exatamente 54/72 |
-| Vazamento de informação oculta | Média | Alto | Projeção por jogador com teste automatizado dedicado |
-| Divergência entre validação de cliente e servidor | Média | Médio | Pacote de regras único e compartilhado; servidor sempre vence |
-| Escopo inflando (expansões, bots, ranking) | Alta | Médio | Não-objetivos explícitos na §1; backlog separado |
-| Complexidade do comércio entre jogadores | Média | Médio | Modelar como sub-máquina de estados com expiração de propostas |
-| Perda de estado por queda do servidor | Baixa | Alto | Snapshot + replay do log |
-| Desmotivação por ciclo longo sem feedback | Média | Médio | Entregar CLI jogável na Fase 1 e hot-seat na Fase 3 |
+| Risco                                             | Prob. | Impacto | Mitigação                                                                        |
+| ------------------------------------------------- | ----- | ------- | -------------------------------------------------------------------------------- |
+| Bugs sutis de regra descobertos tarde             | Alta  | Alto    | Fase 1 isolada, testes de propriedade, log de ações para reproduzir qualquer bug |
+| Geometria de vértices/arestas mal modelada        | Média | Alto    | Adotar ID canônico por tripla de hexágonos; teste que exige exatamente 54/72     |
+| Vazamento de informação oculta                    | Média | Alto    | Projeção por jogador com teste automatizado dedicado                             |
+| Divergência entre validação de cliente e servidor | Média | Médio   | Pacote de regras único e compartilhado; servidor sempre vence                    |
+| Escopo inflando (expansões, bots, ranking)        | Alta  | Médio   | Não-objetivos explícitos na §1; backlog separado                                 |
+| Complexidade do comércio entre jogadores          | Média | Médio   | Modelar como sub-máquina de estados com expiração de propostas                   |
+| Perda de estado por queda do servidor             | Baixa | Alto    | Snapshot + replay do log                                                         |
+| Desmotivação por ciclo longo sem feedback         | Média | Médio   | Entregar CLI jogável na Fase 1 e hot-seat na Fase 3                              |
 
 ---
 
@@ -646,14 +673,14 @@ Definir antes do início da Fase 0:
 
 ## 12. Glossário
 
-| Termo | Significado |
-|---|---|
-| **Vértice** | Interseção onde se constrói assentamento/cidade (54 no tabuleiro) |
-| **Aresta** | Caminho onde se constrói estrada (72 no tabuleiro) |
-| **Coordenada axial** | Sistema `(q, r)` para malha hexagonal |
-| **Motor de regras** | Pacote puro e determinístico que decide validade e efeito das ações |
-| **Servidor autoritativo** | Arquitetura em que só o servidor decide o estado real |
-| **Projeção (client view)** | Versão do estado filtrada para um jogador específico |
-| **Event sourcing** | Persistir a sequência de ações em vez de apenas o estado final |
-| **PRNG semeado** | Gerador pseudoaleatório reproduzível a partir de uma semente |
-| **Trilho (trail)** | Caminho em grafo que não repete arestas, mas pode repetir vértices |
+| Termo                      | Significado                                                         |
+| -------------------------- | ------------------------------------------------------------------- |
+| **Vértice**                | Interseção onde se constrói assentamento/cidade (54 no tabuleiro)   |
+| **Aresta**                 | Caminho onde se constrói estrada (72 no tabuleiro)                  |
+| **Coordenada axial**       | Sistema `(q, r)` para malha hexagonal                               |
+| **Motor de regras**        | Pacote puro e determinístico que decide validade e efeito das ações |
+| **Servidor autoritativo**  | Arquitetura em que só o servidor decide o estado real               |
+| **Projeção (client view)** | Versão do estado filtrada para um jogador específico                |
+| **Event sourcing**         | Persistir a sequência de ações em vez de apenas o estado final      |
+| **PRNG semeado**           | Gerador pseudoaleatório reproduzível a partir de uma semente        |
+| **Trilho (trail)**         | Caminho em grafo que não repete arestas, mas pode repetir vértices  |

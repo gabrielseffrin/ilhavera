@@ -20,8 +20,7 @@ import { recomputeLongestRoad } from './scoring/longestRoad.js';
 import { hasWon, recomputeLargestArmy, victoryPoints } from './scoring/victory.js';
 
 export type ReduceResult =
-  | { ok: true; state: GameState; events: GameEvent[] }
-  | { ok: false; error: ErrorCode };
+  { ok: true; state: GameState; events: GameEvent[] } | { ok: false; error: ErrorCode };
 
 /** Ações que podem alterar a topologia de estradas e, portanto, o bônus. */
 const AFFECTS_LONGEST_ROAD = new Set<Action['type']>(['placeRoad', 'placeSettlement']);

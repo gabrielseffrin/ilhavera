@@ -140,8 +140,8 @@ describe('Estrada Mais Longa: posse do bônus', () => {
     const anaTrilha = buildTrail(s, s.board.vertexOrder[0]!, 5);
     s = placeRoads(s, 'ana', anaTrilha.edges);
 
-    const longe = s.board.vertexOrder.find(
-      (v) => s.board.vertices[v]!.edges.every((e) => s.roads[e] === undefined),
+    const longe = s.board.vertexOrder.find((v) =>
+      s.board.vertices[v]!.edges.every((e) => s.roads[e] === undefined),
     )!;
     const brunoTrilha = buildTrail(s, longe, 5);
     s = placeRoads(s, 'bruno', brunoTrilha.edges);
@@ -156,8 +156,8 @@ describe('Estrada Mais Longa: posse do bônus', () => {
     let s = tabuleiroLimpo();
     s = placeRoads(s, 'ana', buildTrail(s, s.board.vertexOrder[0]!, 5).edges);
 
-    const longe = s.board.vertexOrder.find(
-      (v) => s.board.vertices[v]!.edges.every((e) => s.roads[e] === undefined),
+    const longe = s.board.vertexOrder.find((v) =>
+      s.board.vertices[v]!.edges.every((e) => s.roads[e] === undefined),
     )!;
     s = placeRoads(s, 'bruno', buildTrail(s, longe, 6).edges);
 
@@ -175,8 +175,8 @@ describe('Estrada Mais Longa: posse do bônus', () => {
     const anaTrilha = buildTrail(s, s.board.vertexOrder[0]!, 7);
     s = placeRoads(s, 'ana', anaTrilha.edges);
 
-    const livre1 = s.board.vertexOrder.find(
-      (v) => s.board.vertices[v]!.edges.every((e) => s.roads[e] === undefined),
+    const livre1 = s.board.vertexOrder.find((v) =>
+      s.board.vertices[v]!.edges.every((e) => s.roads[e] === undefined),
     )!;
     s = placeRoads(s, 'bruno', buildTrail(s, livre1, 5).edges);
 
@@ -208,8 +208,8 @@ describe('Estrada Mais Longa: posse do bônus', () => {
   it('devolve o bônus quando alguém desempata depois', () => {
     let s = tabuleiroLimpo();
     s = placeRoads(s, 'bruno', buildTrail(s, s.board.vertexOrder[0]!, 5).edges);
-    const livre = s.board.vertexOrder.find(
-      (v) => s.board.vertices[v]!.edges.every((e) => s.roads[e] === undefined),
+    const livre = s.board.vertexOrder.find((v) =>
+      s.board.vertices[v]!.edges.every((e) => s.roads[e] === undefined),
     )!;
     const carlaTrilha = buildTrail(s, livre, 5);
     s = placeRoads(s, 'carla', carlaTrilha.edges);

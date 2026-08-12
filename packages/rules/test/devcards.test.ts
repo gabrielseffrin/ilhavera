@@ -134,7 +134,8 @@ describe('Soldado', () => {
     expect(s.robberReturnPhase).toBe('awaitingRoll');
 
     const destino = s.board.hexOrder.find(
-      (h) => h !== s.robberHex && s.board.hexes[h]!.vertices.every((v) => s.buildings[v] === undefined),
+      (h) =>
+        h !== s.robberHex && s.board.hexes[h]!.vertices.every((v) => s.buildings[v] === undefined),
     )!;
     s = apply(s, { type: 'moveRobber', player: 'ana', hexId: destino, stealFrom: null });
 
@@ -328,9 +329,7 @@ describe('Monopólio', () => {
     expect(s.players.find((p) => p.id === 'ana')!.resources.ore).toBe(0);
     // A carta foi gasta assim mesmo — é o risco da jogada.
     expect(s.devCardPlayedThisTurn).toBe(true);
-    expect(
-      s.players.find((p) => p.id === 'ana')!.devCards.filter((c) => c.played),
-    ).toHaveLength(1);
+    expect(s.players.find((p) => p.id === 'ana')!.devCards.filter((c) => c.played)).toHaveLength(1);
   });
 
   it('não mexe no banco', () => {

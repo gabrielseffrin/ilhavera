@@ -87,9 +87,7 @@ export function recomputeLongestRoad(
     return { owner: null, length: 0 };
   }
 
-  const leaders = [...lengths.entries()]
-    .filter(([, len]) => len === maxLength)
-    .map(([id]) => id);
+  const leaders = [...lengths.entries()].filter(([, len]) => len === maxLength).map(([id]) => id);
 
   // O detentor mantém o bônus enquanto ninguém o superar estritamente —
   // inclusive quando empata no topo.

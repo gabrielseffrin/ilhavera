@@ -15,7 +15,13 @@ import {
   type GameState,
 } from '@ilhavera/rules';
 
-import { describeEdge, describeHex, describeResources, describeVertex, playerTag } from './render.js';
+import {
+  describeEdge,
+  describeHex,
+  describeResources,
+  describeVertex,
+  playerTag,
+} from './render.js';
 
 export const ACTION_GROUP_LABELS: Record<ActionType, string> = {
   placeSettlement: 'Colocar assentamento',

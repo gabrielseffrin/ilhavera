@@ -81,7 +81,8 @@ describe('produção de recursos', () => {
 
     const bancoAntes = s.bank.wool;
     const { state } = produzir(s, hex.number!);
-    const ganho = state.players.find((p) => p.id === 'ana')!.resources.wool -
+    const ganho =
+      state.players.find((p) => p.id === 'ana')!.resources.wool -
       s.players.find((p) => p.id === 'ana')!.resources.wool;
     expect(state.bank.wool).toBe(bancoAntes - ganho);
   });
@@ -198,10 +199,15 @@ describe('rolagem', () => {
     // Procura um cursor cuja rolagem não some 7.
     let tentativa = 0;
     while (tentativa < 50) {
-      const teste = apply(patch(s, (d) => { d.rngCursor = tentativa; }), {
-        type: 'rollDice',
-        player: 'ana',
-      });
+      const teste = apply(
+        patch(s, (d) => {
+          d.rngCursor = tentativa;
+        }),
+        {
+          type: 'rollDice',
+          player: 'ana',
+        },
+      );
       if (teste.lastRoll!.total !== 7) {
         expect(teste.phase).toBe('main');
         expect(teste.rngCursor).toBe(tentativa + 2);

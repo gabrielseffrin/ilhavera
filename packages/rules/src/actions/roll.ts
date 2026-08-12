@@ -18,7 +18,10 @@ import { rollDice } from '../rng.js';
 import type { Emit } from './kit.js';
 import type { ActionOf } from './types.js';
 
-export function validateRollDice(_state: GameState, _action: ActionOf<'rollDice'>): ErrorCode | null {
+export function validateRollDice(
+  _state: GameState,
+  _action: ActionOf<'rollDice'>,
+): ErrorCode | null {
   return null;
 }
 
@@ -102,7 +105,9 @@ export function produceResources(draft: GameState, total: number, emit: Emit): v
   const blockedByBank: Resource[] = [];
 
   for (const resource of RESOURCES) {
-    const beneficiaries = draft.players.filter((p) => (demand[p.id] as ResourceCount)[resource] > 0);
+    const beneficiaries = draft.players.filter(
+      (p) => (demand[p.id] as ResourceCount)[resource] > 0,
+    );
     if (beneficiaries.length === 0) continue;
 
     const totalDemand = beneficiaries.reduce(

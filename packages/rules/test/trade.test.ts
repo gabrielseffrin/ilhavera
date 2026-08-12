@@ -295,7 +295,12 @@ describe('comércio entre jogadores', () => {
     const s = comProposta();
     expectError(
       s,
-      { type: 'tradeRespond', player: 'bruno', tradeId: 'inexistente', response: { type: 'accept' } },
+      {
+        type: 'tradeRespond',
+        player: 'bruno',
+        tradeId: 'inexistente',
+        response: { type: 'accept' },
+      },
       'TRADE_EXPIRED',
     );
   });

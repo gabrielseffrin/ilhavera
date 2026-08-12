@@ -61,9 +61,7 @@ export type PlayerState = {
 export type TradeTerms = { give: ResourceCount; receive: ResourceCount };
 
 export type TradeResponse =
-  | { type: 'accept' }
-  | { type: 'decline' }
-  | { type: 'counter'; terms: TradeTerms };
+  { type: 'accept' } | { type: 'decline' } | { type: 'counter'; terms: TradeTerms };
 
 export type ActiveTrade = {
   id: string;

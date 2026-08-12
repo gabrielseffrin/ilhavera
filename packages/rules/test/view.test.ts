@@ -126,8 +126,7 @@ describe('toClientView: informação oculta', () => {
 
     const evento = (id: string | null) =>
       toClientView(s, id).log.find((e) => e.type === 'stolen') as
-        | { data: { resource: string | null } }
-        | undefined;
+        { data: { resource: string | null } } | undefined;
 
     // Ladrão e vítima veem; o resto da mesa, não.
     expect(evento('ana')!.data.resource).toBe('ore');

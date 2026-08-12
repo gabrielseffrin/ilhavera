@@ -5,7 +5,13 @@
 import type { ErrorCode } from '../errors.js';
 import type { GameState, TradeTerms } from '../state.js';
 import { RESOURCES, type PlayerId, type ResourceCount } from '../types.js';
-import { addResources, bankTradeRate, canAfford, countResources, subtractResources } from '../query.js';
+import {
+  addResources,
+  bankTradeRate,
+  canAfford,
+  countResources,
+  subtractResources,
+} from '../query.js';
 import type { Emit } from './kit.js';
 import type { ActionOf } from './types.js';
 

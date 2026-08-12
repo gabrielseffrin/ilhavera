@@ -12,7 +12,13 @@ import {
   type GameState,
 } from '@ilhavera/rules';
 
-import { describeEdge, describeHex, describeResources, describeVertex, playerTag } from './render.js';
+import {
+  describeEdge,
+  describeHex,
+  describeResources,
+  describeVertex,
+  playerTag,
+} from './render.js';
 
 export function describeEvent(state: GameState, event: GameEvent): string {
   switch (event.type) {

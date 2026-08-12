@@ -45,11 +45,7 @@ const DEFAULT_WEIGHT = 20;
 
 const COLORS: PlayerColor[] = ['red', 'blue', 'white', 'orange'];
 
-export type StepHook = (context: {
-  state: GameState;
-  action: Action;
-  step: number;
-}) => void;
+export type StepHook = (context: { state: GameState; action: Action; step: number }) => void;
 
 export type PlayOptions = {
   playerCount?: number;
@@ -151,7 +147,10 @@ function nextActor(
       if (d.value < pendingTargets.length) {
         return { playerId: pendingTargets[d.value] as PlayerId, cursor: d.cursor };
       }
-      return { playerId: (state.players[state.currentPlayerIndex] as { id: string }).id, cursor: d.cursor };
+      return {
+        playerId: (state.players[state.currentPlayerIndex] as { id: string }).id,
+        cursor: d.cursor,
+      };
     }
   }
 

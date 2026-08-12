@@ -17,7 +17,13 @@ import type { Action } from './actions/types.js';
 import type { Handler } from './actions/kit.js';
 import type { GameState } from './state.js';
 import { RESOURCES, emptyResourceCount, type PlayerId, type Resource } from './types.js';
-import { countResources, currentPlayer, findPlayer, playerBuildings, stealCandidates } from './query.js';
+import {
+  countResources,
+  currentPlayer,
+  findPlayer,
+  playerBuildings,
+  stealCandidates,
+} from './query.js';
 
 /**
  * Mesmos portões do `reduce` (fase, ator, validação), sem aplicar nada.

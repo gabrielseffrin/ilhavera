@@ -155,7 +155,11 @@ describe('ordem do setup', () => {
     let s = newGame();
     const vertexId = s.board.vertexOrder[0]!;
     s = apply(s, { type: 'placeSettlement', player: 'ana', vertexId });
-    s = apply(s, { type: 'placeRoad', player: 'ana', edgeId: s.board.vertices[vertexId]!.edges[0]! });
+    s = apply(s, {
+      type: 'placeRoad',
+      player: 'ana',
+      edgeId: s.board.vertices[vertexId]!.edges[0]!,
+    });
 
     const vizinho = s.board.vertices[vertexId]!.adjacentVertices[0]!;
     expectError(
@@ -163,11 +167,7 @@ describe('ordem do setup', () => {
       { type: 'placeSettlement', player: 'bruno', vertexId: vizinho },
       'DISTANCE_RULE_VIOLATION',
     );
-    expectError(
-      s,
-      { type: 'placeSettlement', player: 'bruno', vertexId },
-      'VERTEX_OCCUPIED',
-    );
+    expectError(s, { type: 'placeSettlement', player: 'bruno', vertexId }, 'VERTEX_OCCUPIED');
   });
 
   it('rejeita jogador fora da vez', () => {

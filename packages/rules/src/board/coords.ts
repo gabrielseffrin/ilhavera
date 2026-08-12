@@ -69,10 +69,7 @@ export function standardHexes(): HexCoord[] {
  * qual dos hexágonos você chegou nele.
  */
 export function makeVertexId(hexes: readonly HexCoord[]): VertexId {
-  return hexes
-    .map(toHexId)
-    .sort()
-    .join('|');
+  return hexes.map(toHexId).sort().join('|');
 }
 
 export function parseVertexId(id: VertexId): HexCoord[] {

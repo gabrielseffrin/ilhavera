@@ -517,7 +517,9 @@ function mostrarFim(state: GameState): void {
     const detalhe =
       `assentamentos ${pv.settlements}  cidades ${pv.cities}  ` +
       `exército ${pv.largestArmy}  estrada ${pv.longestRoad}  cartas de PV ${pv.devCards}`;
-    console.log(`  ${playerTag(state, p.id).padEnd(20)} ${String(pv.total).padStart(2)} PV   ${detalhe}`);
+    console.log(
+      `  ${playerTag(state, p.id).padEnd(20)} ${String(pv.total).padStart(2)} PV   ${detalhe}`,
+    );
   }
 
   console.log('');

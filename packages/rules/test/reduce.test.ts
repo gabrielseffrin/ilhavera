@@ -48,7 +48,11 @@ describe('portão de fase e ator', () => {
     );
     expectError(
       s,
-      { type: 'discard', player: 'ana', resources: { lumber: 0, brick: 0, wool: 0, grain: 0, ore: 0 } },
+      {
+        type: 'discard',
+        player: 'ana',
+        resources: { lumber: 0, brick: 0, wool: 0, grain: 0, ore: 0 },
+      },
       'INVALID_PHASE',
     );
   });
@@ -116,11 +120,17 @@ describe('encerramento de turno', () => {
     expect(s.turnNumber).toBe(turnoAntes + 1);
     expect(s.phase).toBe('awaitingRoll');
 
-    s = patch(s, (d) => { d.phase = 'main'; });
+    s = patch(s, (d) => {
+      d.phase = 'main';
+    });
     s = apply(s, { type: 'endTurn', player: 'bruno' });
-    s = patch(s, (d) => { d.phase = 'main'; });
+    s = patch(s, (d) => {
+      d.phase = 'main';
+    });
     s = apply(s, { type: 'endTurn', player: 'carla' });
-    s = patch(s, (d) => { d.phase = 'main'; });
+    s = patch(s, (d) => {
+      d.phase = 'main';
+    });
     s = apply(s, { type: 'endTurn', player: 'davi' });
 
     expect(s.players[s.currentPlayerIndex]!.id).toBe('ana');
