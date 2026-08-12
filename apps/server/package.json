@@ -11,18 +11,23 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "dev": "tsx watch src/main.ts",
+    "db:generate": "drizzle-kit generate",
     "start": "node dist/main.js"
   },
   "dependencies": {
     "@ilhavera/protocol": "workspace:*",
     "@ilhavera/rules": "workspace:*",
+    "drizzle-orm": "^0.45.2",
     "fastify": "^5.11.3",
+    "pg": "^8.23.0",
     "socket.io": "^4.8.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.6",
+    "@types/pg": "^8.21.0",
     "@vitest/coverage-v8": "^2.1.8",
+    "drizzle-kit": "^0.31.10",
     "socket.io-client": "^4.8.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
