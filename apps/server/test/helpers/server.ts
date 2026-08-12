@@ -19,6 +19,12 @@ export type Client = {
   /** O token que o servidor emitiu no `session:issued`, se emitiu. */
   token: string | null;
   playerId: string | null;
+  /**
+   * O último `state:snapshot` recebido. Guardado porque o snapshot de
+   * reconexão sai dentro do `connection` do servidor e chega antes de qualquer
+   * `next()` que o teste consiga registrar depois do `connect`.
+   */
+  lastSnapshot: unknown;
   /** `requestId` explícito só quando o teste quer simular reenvio. */
   send<T = unknown>(
     command: CommandName,
@@ -68,6 +74,7 @@ export async function startTestServer(options: BuildOptions = {}): Promise<TestS
         socket,
         token: null,
         playerId: null,
+        lastSnapshot: null,
 
         async send<T = unknown>(
           command: CommandName,
@@ -112,6 +119,10 @@ export async function startTestServer(options: BuildOptions = {}): Promise<TestS
       socket.on('session:issued', (dados: { playerId: string; token: string }) => {
         cliente.token = dados.token;
         cliente.playerId = dados.playerId;
+      });
+
+      socket.on('state:snapshot', (dados: unknown) => {
+        cliente.lastSnapshot = dados;
       });
 
       await new Promise<void>((resolve, reject) => {

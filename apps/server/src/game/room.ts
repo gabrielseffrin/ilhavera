@@ -50,8 +50,15 @@ export type SubmitAck = Ack<{ version: number }>;
 
 export type SubmitResult = {
   ack: SubmitAck;
-  /** `false` quando o `requestId` já tinha resposta: nada foi aplicado, nada a emitir. */
+  /** `true` quando o estado mudou — e só então há `state:patch` para emitir. */
   applied: boolean;
+  /**
+   * `true` quando o `requestId` já tinha resposta e ela foi repetida. Separado
+   * de `applied` porque a borda precisa distinguir "recusado agora" de
+   * "recusado antes, e você está perguntando de novo": só o primeiro vira
+   * `game:error`.
+   */
+  deduped: boolean;
   events: readonly GameEvent[];
 };
 
@@ -110,20 +117,20 @@ export class GameRoom {
     const chave = `${playerId}:${requestId}`;
     const anterior = this.#respostas.get(chave);
     if (anterior !== undefined) {
-      return { ack: anterior, applied: false, events: [] };
+      return { ack: anterior, applied: false, deduped: true, events: [] };
     }
 
     const resultado = reduce(this.#state, action);
     if (!resultado.ok) {
       const ack: SubmitAck = { ok: false, error: resultado.error };
       this.#registrar(chave, ack);
-      return { ack, applied: false, events: [] };
+      return { ack, applied: false, deduped: false, events: [] };
     }
 
     this.#state = resultado.state;
     const ack: SubmitAck = { ok: true, data: { version: resultado.state.version } };
     this.#registrar(chave, ack);
-    return { ack, applied: true, events: resultado.events };
+    return { ack, applied: true, deduped: false, events: resultado.events };
   }
 
   #registrar(chave: string, ack: SubmitAck): void {

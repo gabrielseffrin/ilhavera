@@ -1,25 +1,74 @@
 /**
- * Comandos `game:*` — a jogada chegando ao motor (§5.1).
+ * Comandos `game:*` e a emissão de estado — §5.1 e §5.2.
  *
  * O caminho de todo comando é sempre o mesmo: `handle` valida o envelope e o
  * payload, `toAction` traduz para o vocabulário do motor, e o `GameRoom` da sala
  * aplica atrás da fila. O servidor não decide nada de regra: quem aceita ou
  * recusa é o `reduce`, e a resposta dele vai direto para o ack.
+ *
+ * **Este módulo é o único lugar do servidor autorizado a emitir estado de
+ * partida**, e emite sempre por jogador, nunca para a sala inteira: cada um vê
+ * uma partida diferente, e um `io.to(code).emit` com o estado cru entregaria a
+ * mão alheia a todo mundo. Quem sai daqui passou por `toClientView` (estado) ou
+ * por `projectEvents` (delta).
  */
 
 import type { FastifyBaseLogger } from 'fastify';
 
 import { toAction, type GameCommandName } from '@ilhavera/protocol';
+import type { GameEvent } from '@ilhavera/rules';
 
 import type { PlayerId } from '../identity/players.js';
-import type { RoomRegistry } from '../rooms/registry.js';
+import type { Room, RoomRegistry } from '../rooms/registry.js';
 import { handle } from './handle.js';
-import type { GameSocket } from './types.js';
+import type { GameServer, GameSocket } from './types.js';
 
 export type GameDeps = {
+  io: GameServer;
   rooms: RoomRegistry;
   log: FastifyBaseLogger;
 };
+
+/**
+ * Estado completo, um por jogador (§5.2: "enviado ao entrar e ao reconectar").
+ *
+ * O endereço é a sala privada de cada `playerId`, e não o socket: quem abriu
+ * duas abas tem duas conexões e as duas precisam do mesmo estado.
+ */
+export function emitSnapshot(io: GameServer, room: Room): void {
+  const game = room.game;
+  if (game === null) return;
+
+  for (const seat of room.seats) {
+    io.to(seat.playerId).emit('state:snapshot', game.view(seat.playerId));
+  }
+}
+
+/** Snapshot para uma conexão só — o caso da reconexão. */
+export function emitSnapshotTo(socket: GameSocket, room: Room): void {
+  const game = room.game;
+  if (game === null) return;
+
+  socket.emit('state:snapshot', game.view(socket.data.playerId));
+}
+
+/**
+ * O delta de uma jogada (§5.2). `version` vai junto porque é ela que deixa o
+ * cliente perceber que perdeu um patch e pedir estado inteiro — a "regra de
+ * consistência" de §5.2. O `state:resync` que fecha esse ciclo é da M6.
+ */
+export function emitPatch(io: GameServer, room: Room, events: readonly GameEvent[]): void {
+  const game = room.game;
+  if (game === null) return;
+
+  const version = game.version;
+  for (const seat of room.seats) {
+    io.to(seat.playerId).emit('state:patch', {
+      version,
+      events: game.patchFor(events, seat.playerId),
+    });
+  }
+}
 
 export function registerGameCommands(socket: GameSocket, deps: GameDeps): void {
   /**
@@ -47,7 +96,7 @@ export function registerGameCommands(socket: GameSocket, deps: GameDeps): void {
 }
 
 function ligar<K extends GameCommandName>(socket: GameSocket, name: K, deps: GameDeps): void {
-  const { rooms, log } = deps;
+  const { io, rooms, log } = deps;
 
   handle(
     socket,
@@ -62,7 +111,7 @@ function ligar<K extends GameCommandName>(socket: GameSocket, name: K, deps: Gam
       // ainda não virou partida.
       if (game === null) return { ok: false, error: 'ROOM_NOT_STARTED' };
 
-      const { ack, applied, events } = await game.submit({
+      const { ack, applied, deduped, events } = await game.submit({
         playerId,
         requestId,
         action: toAction(name, payload, playerId),
@@ -73,6 +122,19 @@ function ligar<K extends GameCommandName>(socket: GameSocket, name: K, deps: Gam
           { code: room.code, comando: name, eventos: events.map((e) => e.type) },
           'jogada aplicada',
         );
+        emitPatch(io, room, events);
+      } else if (!ack.ok && !deduped) {
+        /**
+         * Redundante com o ack de propósito. O ack é a resposta autoritativa,
+         * mas o store do cliente assina um fluxo de eventos; sem isto, cada
+         * ponto de chamada teria que costurar a própria rejeição no log da
+         * interface. Vai só para quem enviou — errar não é notícia de mesa.
+         *
+         * Reenvio deduplicado não passa por aqui: o `ack` repetido já é a
+         * resposta, e reemitir o erro faria a interface avisar duas vezes de
+         * uma coisa que aconteceu uma vez.
+         */
+        socket.emit('game:error', { requestId, code: ack.error });
       }
 
       return ack;

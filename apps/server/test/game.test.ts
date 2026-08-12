@@ -8,7 +8,12 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { enumerateLegalActions, type Action } from '@ilhavera/rules';
+import {
+  enumerateLegalActions,
+  type Action,
+  type ClientView,
+  type GameEvent,
+} from '@ilhavera/rules';
 
 import { startTestServer, type Client, type TestServer } from './helpers/server.js';
 import type { GameRoom } from '../src/game/room.js';
@@ -21,6 +26,9 @@ afterEach(async () => {
   atual = null;
 });
 
+/** O corpo do `state:patch` da §5.2. */
+type Patch = { version: number; events: GameEvent[] };
+
 type Partida = {
   s: TestServer;
   clientes: Client[];
@@ -29,8 +37,8 @@ type Partida = {
   game(): GameRoom;
 };
 
-/** Lobby cheio e partida iniciada, no molde do `lobby()` de `rooms.test.ts`. */
-async function partida(quantos = 3): Promise<Partida> {
+/** Lobby cheio, ainda sem `room:start` — para o teste poder escutar antes. */
+async function lobby(quantos = 3): Promise<Partida> {
   atual = await startTestServer({ registry: { makeSeed: () => 'semente-de-teste' } });
   const s = atual;
 
@@ -46,8 +54,6 @@ async function partida(quantos = 3): Promise<Partida> {
     clientes.push(cliente);
   }
 
-  await host.send('room:start');
-
   return {
     s,
     clientes,
@@ -58,6 +64,16 @@ async function partida(quantos = 3): Promise<Partida> {
       return room.game;
     },
   };
+}
+
+/** Lobby cheio e partida iniciada, no molde do `lobby()` de `rooms.test.ts`. */
+async function partida(quantos = 3): Promise<Partida> {
+  const p = await lobby(quantos);
+  const host = p.clientes[0];
+  if (host === undefined) throw new Error('lobby sem host');
+
+  await host.send('room:start');
+  return p;
 }
 
 /** A primeira jogada legal de quem está na vez, e o cliente dono dela. */
@@ -159,6 +175,24 @@ describe('game:*: a borda de validação', () => {
     expect(p.game().version).toBe(0);
   });
 
+  it('bug do servidor vira ack INTERNAL em vez de deixar o cliente pendurado', async () => {
+    const p = await partida();
+    const { acao, cliente } = daVez(p);
+    const { nome, payload } = comandoDe(acao);
+
+    // Exceção escapando do motor é bug, não jogada inválida — o `reduce`
+    // devolve rejeição como valor. Aqui a exceção é forçada para exercitar a
+    // rede de segurança: sem ela o cliente esperaria o timeout sem resposta.
+    const game = p.game() as unknown as { submit: () => Promise<never> };
+    game.submit = () => {
+      throw new Error('boom');
+    };
+
+    const ack = await cliente.send(nome, payload);
+
+    expect(ack).toEqual({ ok: false, error: 'INTERNAL' });
+  });
+
   it('carta de progresso com parâmetro do tipo errado é BAD_PAYLOAD', async () => {
     const p = await partida();
     const { cliente } = daVez(p);
@@ -181,6 +215,147 @@ describe('game:*: idempotência pela rede', () => {
 
     expect(reenvio).toEqual(primeira);
     expect(p.game().version).toBe(1);
+  });
+});
+
+describe('state:snapshot', () => {
+  it('chega a cada jogador no room:start, cada um se vendo como `you`', async () => {
+    const p = await lobby(3);
+    const host = p.clientes[0];
+    if (host === undefined) throw new Error('lobby sem host');
+
+    // Escuta antes de iniciar: o snapshot sai dentro do `room:start`.
+    const esperados = p.clientes.map((c) => c.next<ClientView>('state:snapshot'));
+    await host.send('room:start');
+    const snapshots = await Promise.all(esperados);
+
+    for (const [i, snapshot] of snapshots.entries()) {
+      expect(snapshot.you?.id).toBe(p.clientes[i]?.playerId);
+      expect(snapshot.phase).toBe('setup1');
+      expect(snapshot.version).toBe(0);
+    }
+  });
+
+  it('nunca leva a mão alheia nem o baralho', async () => {
+    const p = await lobby(3);
+    const host = p.clientes[0];
+    if (host === undefined) throw new Error('lobby sem host');
+
+    const esperado = host.next<ClientView>('state:snapshot');
+    await host.send('room:start');
+    const snapshot = await esperado;
+
+    const cru = JSON.parse(JSON.stringify(snapshot)) as Record<string, unknown>;
+    expect(cru['devDeck']).toBeUndefined();
+    expect((cru as { devDeckSize: number }).devDeckSize).toBeGreaterThan(0);
+
+    for (const jogador of snapshot.players) {
+      if (jogador.id === host.playerId) continue;
+      expect(jogador).not.toHaveProperty('resources');
+      expect(jogador).not.toHaveProperty('devCards');
+      expect(jogador.resourceCount).toBeDefined();
+    }
+  });
+
+  it('quem reconecta no meio da partida recebe o estado inteiro', async () => {
+    const p = await partida(3);
+    const { acao, cliente } = daVez(p);
+    const { nome, payload } = comandoDe(acao);
+    await cliente.send(nome, payload);
+
+    const token = cliente.token;
+    cliente.disconnect();
+
+    // O snapshot de reconexão sai dentro do `connection`, antes de o teste ter
+    // onde escutar — por isso o helper guarda o último recebido.
+    const devolta = await p.s.connect(token ?? undefined);
+    const snapshot = devolta.lastSnapshot as ClientView | null;
+
+    expect(snapshot?.version).toBe(1);
+    expect(snapshot?.you?.id).toBe(cliente.playerId);
+  });
+});
+
+describe('state:patch', () => {
+  it('sai a cada jogada aplicada, com a versão nova, para todos da sala', async () => {
+    const p = await partida(3);
+    const { acao, cliente } = daVez(p);
+    const { nome, payload } = comandoDe(acao);
+
+    const esperados = p.clientes.map((c) => c.next<Patch>('state:patch'));
+    await cliente.send(nome, payload);
+    const patches = await Promise.all(esperados);
+
+    for (const patch of patches) {
+      expect(patch.version).toBe(1);
+      expect(patch.events.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('não sai em reenvio deduplicado', async () => {
+    const p = await partida(3);
+    const { acao, cliente } = daVez(p);
+    const { nome, payload } = comandoDe(acao);
+
+    await cliente.send(nome, payload, 'req-fixo');
+
+    let patches = 0;
+    cliente.socket.on('state:patch', () => {
+      patches += 1;
+    });
+
+    await cliente.send(nome, payload, 'req-fixo');
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(patches).toBe(0);
+    expect(p.game().version).toBe(1);
+  });
+});
+
+describe('game:error', () => {
+  it('vai só para quem enviou o comando recusado', async () => {
+    const p = await partida(3);
+    const { acao, cliente } = daVez(p);
+    const { nome, payload } = comandoDe(acao);
+
+    const outro = p.clientes.find((c) => c !== cliente);
+    if (outro === undefined) throw new Error('mesa de um jogador só');
+
+    let vazouParaOutro = 0;
+    cliente.socket.on('game:error', () => {
+      vazouParaOutro += 1;
+    });
+
+    const recebido = outro.next<{ requestId: string; code: string }>('game:error');
+    await outro.send(nome, payload, 'req-do-erro');
+    const erro = await recebido;
+
+    expect(erro).toEqual({ requestId: 'req-do-erro', code: 'NOT_YOUR_TURN' });
+    expect(vazouParaOutro).toBe(0);
+  });
+
+  it('não repete o aviso quando o comando recusado é reenviado', async () => {
+    const p = await partida(3);
+    const { acao, cliente } = daVez(p);
+    const { nome, payload } = comandoDe(acao);
+
+    const outro = p.clientes.find((c) => c !== cliente);
+    if (outro === undefined) throw new Error('mesa de um jogador só');
+
+    await outro.send(nome, payload, 'req-do-erro');
+
+    let avisos = 0;
+    outro.socket.on('game:error', () => {
+      avisos += 1;
+    });
+
+    // Reenvio: o ack repetido já é a resposta. Avisar de novo faria a interface
+    // reclamar duas vezes de uma coisa que aconteceu uma vez.
+    const ack = await outro.send(nome, payload, 'req-do-erro');
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(ack).toEqual({ ok: false, error: 'NOT_YOUR_TURN' });
+    expect(avisos).toBe(0);
   });
 });
 

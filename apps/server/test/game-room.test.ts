@@ -8,7 +8,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { enumerateLegalActions, type Action } from '@ilhavera/rules';
+import { enumerateLegalActions, type Action, type GameEvent } from '@ilhavera/rules';
 
 import { GameRoom } from '../src/game/room.js';
 
@@ -236,5 +236,27 @@ describe('GameRoom: projeção', () => {
 
     const deEspectador = room.view(null);
     expect(deEspectador.you).toBeNull();
+  });
+
+  it('o delta também passa pela projeção — o roubo não vaza para a mesa', () => {
+    const room = novaPartida();
+    const roubo: GameEvent = {
+      type: 'stolen',
+      actor: 'ana',
+      data: { from: 'bruno', resource: 'ore' },
+    };
+
+    const paraLadrao = room.patchFor([roubo], 'ana')[0];
+    const paraVitima = room.patchFor([roubo], 'bruno')[0];
+    const paraTerceiro = room.patchFor([roubo], 'carla')[0];
+
+    expect(paraLadrao).toEqual(roubo);
+    expect(paraVitima).toEqual(roubo);
+    // Que houve roubo é público; qual recurso, não.
+    expect(paraTerceiro).toEqual({
+      type: 'stolen',
+      actor: 'ana',
+      data: { from: 'bruno', resource: null },
+    });
   });
 });

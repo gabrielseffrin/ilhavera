@@ -2,14 +2,16 @@
  * Comandos `room:*` — o lobby na borda de rede (§5.1).
  *
  * Regra desta camada: **nada entra sem passar pelo zod** (`handle`), e nada sai
- * sem passar por uma função de projeção. Aqui a projeção é `toRoomView`; estado
- * de partida sai por `toClientView`, em `game.ts`.
+ * sem passar por uma função de projeção. Aqui a projeção é `toRoomView` — que
+ * nunca leva `GameState` junto. Estado de partida sai por `game.ts`, e é de lá
+ * que `room:start` toma emprestado o `emitSnapshot`.
  */
 
 import type { FastifyBaseLogger } from 'fastify';
 
 import type { PlayerDirectory } from '../identity/players.js';
 import { toRoomView, type Room, type RoomRegistry } from '../rooms/registry.js';
+import { emitSnapshot } from './game.js';
 import { handle } from './handle.js';
 import type { GameServer, GameSocket } from './types.js';
 
@@ -83,7 +85,9 @@ export function registerRoomCommands(socket: GameSocket, deps: RoomDeps): void {
       if (!iniciada.ok) return { ok: false, error: iniciada.error };
 
       broadcastRoom(io, iniciada.value);
-      // O `state:snapshot` da partida entra na M4, junto com a projeção.
+      // O tabuleiro nasce aqui: cada um recebe a própria projeção da partida.
+      emitSnapshot(io, iniciada.value);
+
       return { ok: true, data: toRoomView(iniciada.value) };
     },
     log,

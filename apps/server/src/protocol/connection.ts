@@ -10,7 +10,7 @@ import type { FastifyBaseLogger } from 'fastify';
 
 import type { PlayerDirectory } from '../identity/players.js';
 import type { RoomRegistry } from '../rooms/registry.js';
-import { registerGameCommands } from './game.js';
+import { emitSnapshotTo, registerGameCommands } from './game.js';
 import { broadcastRoom, registerRoomCommands } from './rooms.js';
 import type { GameServer } from './types.js';
 
@@ -52,18 +52,31 @@ export function registerHandlers(io: GameServer, deps: HandlerDeps): void {
       delete dados.issuedToken;
     }
 
+    /**
+     * Sala privada do jogador, usada para endereçar `state:snapshot` e
+     * `state:patch` — cada um vê uma partida diferente, então o estado nunca
+     * sai por `io.to(code)`. Endereçar o jogador em vez do socket resolve as
+     * duas abas abertas de graça. Antes de qualquer emissão: com o adapter em
+     * memória o `join` é síncrono, mas a ordem passa a importar quando o
+     * adapter Redis entrar.
+     */
+    void socket.join(dados.playerId);
+
     // Reconexão: quem já tinha assento volta para ele sem precisar de comando.
     const anterior = rooms.byPlayer(dados.playerId);
     if (anterior !== undefined) {
       void socket.join(anterior.code);
       rooms.setConnected(dados.playerId, true);
       broadcastRoom(io, anterior);
+      // Quem volta no meio de uma partida precisa do estado inteiro; os outros
+      // já o têm, então isto vai só para esta conexão.
+      emitSnapshotTo(socket, anterior);
     }
 
     log.debug({ socketId: socket.id, playerId: dados.playerId }, 'socket conectado');
 
     registerRoomCommands(socket, { io, players, rooms, log });
-    registerGameCommands(socket, { rooms, log });
+    registerGameCommands(socket, { io, rooms, log });
 
     socket.on('disconnect', (reason) => {
       const room = rooms.setConnected(dados.playerId, false);
