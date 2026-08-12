@@ -365,6 +365,14 @@ Todos os comandos carregam um `requestId` (idempotência) e são respondidos com
 
 **Regra de consistência:** todo `state:patch` carrega `version`. Se o cliente detectar salto de versão, pede `state:resync` e o servidor devolve um `state:snapshot` completo.
 
+**Como ficou na implementação (M4).** Estado nunca sai para a sala inteira: `state:snapshot` e `state:patch` são emitidos **por jogador**, endereçados a uma sala privada por `playerId`, e sempre pela projeção (`toClientView` para o estado, `projectEvents` para o delta). Emitir os eventos crus do `reduce` para a sala vazaria qual recurso foi roubado — a mesma fronteira de §4.5, pelo canal do delta.
+
+`state:patch` carrega `{ version, events }`, então os eventos narrativos já viajam nele. `game:event` continua declarado no protocolo mas **não é emitido**: um segundo canal com a mesma informação só cria duas versões da verdade para divergirem. Se o cliente da Fase 3 não pedir por ele, sai do contrato.
+
+`game:error` vai só ao socket que enviou o comando recusado, e não se repete em reenvio deduplicado. É redundante com o `ack` de propósito: o `ack` é a resposta autoritativa, o evento é a cópia para o log da interface, que assina um fluxo só.
+
+`state:resync` ainda não existe — é da M6, junto do reenvio pós-reconexão. Hoje quem reconecta recebe um `state:snapshot` inteiro sem pedir.
+
 ### 5.3 Códigos de erro (exemplos)
 
 `NOT_YOUR_TURN`, `INVALID_PHASE`, `INSUFFICIENT_RESOURCES`, `DISTANCE_RULE_VIOLATION`, `VERTEX_OCCUPIED`, `ROAD_NOT_CONNECTED`, `NO_PIECES_LEFT`, `DEV_CARD_ALREADY_PLAYED`, `DEV_CARD_BOUGHT_THIS_TURN`, `ROBBER_SAME_HEX`, `BANK_DEPLETED`, `TRADE_EXPIRED`.
@@ -572,16 +580,21 @@ Premissa de estimativa: **1 desenvolvedor, meio período (~12h/semana)**. Com de
 
 ### Fase 2 — Servidor e protocolo (2 semanas)
 
-- [ ] Fastify + Socket.IO, health check
-- [ ] Identidade de jogador por token no localStorage
-- [ ] Criação/entrada em sala por código de 6 caracteres
-- [ ] `GameRoom`: estado vivo, fila de comandos serializada por sala
-- [ ] Validação de payload com zod na borda
-- [ ] Broadcast de `state:patch` + `state:snapshot`
-- [ ] Persistência: snapshots + `game_actions`
-- [ ] Reconexão com resync
-- [ ] Rate limit por socket
+Os sub-marcos M1–M7 abaixo são a ordem em que a fase é entregue, e aparecem nas mensagens de commit.
+
+- [x] **M1** — Fastify + Socket.IO, health check — `apps/server/src/app.ts`
+- [x] **M2** — Identidade de jogador por token no localStorage — `src/identity/players.ts` (token opaco `id.segredo`, verificação com SHA-256 e `timingSafeEqual`)
+- [x] **M2** — Criação/entrada em sala por código de 6 caracteres — `src/rooms/`, comandos `room:*`
+- [x] **M3** — `GameRoom`: estado vivo, fila de comandos serializada por sala — `src/game/room.ts` (idempotência por `${playerId}:${requestId}`, com o ack anterior repetido verbatim)
+- [x] **M3** — Validação de payload com zod na borda — `src/protocol/handle.ts`, tradução comando→ação em `packages/protocol/src/actions.ts`
+- [x] **M4** — Broadcast de `state:patch` + `state:snapshot` — `src/protocol/game.ts` (emitidos **por jogador**, sempre pela projeção; nunca `io.to(code)` com estado cru)
+- [ ] **M5** — Persistência: snapshots + `game_actions`
+- [ ] **M6** — Reconexão com resync (`state:resync` ainda não existe; hoje a reconexão recebe `state:snapshot` inteiro)
+- [ ] **M7** — Rate limit por socket
 - **Aceite:** dois clientes de teste (scripts Node) jogam uma partida completa via WebSocket; matar o servidor no meio e subir de novo restaura a partida
+  - Parcial em 12/08/2026: três clientes completam o **setup** inteiro por WebSocket em `apps/server/test/game.test.ts`. Falta a partida completa e a restauração, que dependem da M5.
+
+Fora do escopo desta fase, por decisão: chat na sala (Fase 5) e a expiração de salas do ADR-003 — `Room.lastActivityAt` é escrito e ainda não é lido.
 
 ### Fase 3 — Cliente: tabuleiro e HUD (3–4 semanas)
 

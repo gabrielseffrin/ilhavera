@@ -125,6 +125,29 @@ export default tseslint.config(
   },
 
   /**
+   * O `protocol` deixou de ser só esquemas quando ganhou a tradução
+   * comando→ação: agora depende de `rules` e é compartilhado com o cliente da
+   * Fase 3. A seta permitida é `protocol → rules`; qualquer coisa vinda de
+   * `apps/` inverteria a direção e prenderia o pacote ao servidor.
+   */
+  {
+    files: ['packages/protocol/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/apps/**', '@ilhavera/cli', '@ilhavera/server', '@ilhavera/web'],
+              message: 'packages/protocol não pode importar nada de apps/.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  /**
    * Os testes do motor podem usar Date/random para gerar seeds e medir tempo —
    * eles são o mundo externo, não o motor.
    */
