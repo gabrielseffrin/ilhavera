@@ -24,6 +24,8 @@ export type AppServer = {
   readonly rooms: RoomRegistry;
   /** Sobe e devolve o endereço real — que difere do pedido quando `PORT` é 0. */
   listen(): Promise<Address>;
+  /** Identidades e partidas em andamento de volta do banco. Chamado por `listen`. */
+  restore(): Promise<void>;
   close(): Promise<void>;
 };
 
@@ -103,7 +105,21 @@ export function buildServer(config: Config, options: BuildOptions = {}): AppServ
     players,
     rooms,
 
+    async restore(): Promise<void> {
+      await players.restore();
+      const quantas = await rooms.restore((roomId, motivo) => {
+        fastify.log.error({ roomId, motivo }, 'sala não pôde ser restaurada');
+      });
+      if (quantas > 0) fastify.log.info({ salas: quantas }, 'partidas restauradas');
+    },
+
     async listen(): Promise<Address> {
+      /**
+       * Antes de aceitar conexão, não depois: um cliente que reconecta no
+       * milissegundo seguinte ao `listen` precisa encontrar o assento dele já
+       * no lugar, senão vira visitante novo e perde a partida.
+       */
+      await this.restore();
       await fastify.listen({ port: config.PORT, host: config.HOST });
 
       const address = fastify.server.address();

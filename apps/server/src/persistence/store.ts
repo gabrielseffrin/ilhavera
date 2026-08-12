@@ -151,22 +151,22 @@ export class WriteQueue {
  * deveriam depender de Postgres para existir.
  */
 export class NullStore implements Store {
-  async savePlayer(): Promise<void> {}
-  async setPlayerNickname(): Promise<void> {}
+  async savePlayer(_player: StoredPlayer): Promise<void> {}
+  async setPlayerNickname(_id: string, _nickname: string): Promise<void> {}
   async loadPlayers(): Promise<StoredPlayer[]> {
     return [];
   }
-  async saveRoom(): Promise<void> {}
-  async deleteRoom(): Promise<void> {}
-  async loadRooms(): Promise<StoredRoom[]> {
+  async saveRoom(_room: StoredRoom): Promise<void> {}
+  async deleteRoom(_id: string): Promise<void> {}
+  async loadRooms(_status: StoredRoomStatus): Promise<StoredRoom[]> {
     return [];
   }
-  async appendAction(): Promise<void> {}
-  async saveSnapshot(): Promise<void> {}
-  async loadLatestSnapshot(): Promise<StoredSnapshot | undefined> {
+  async appendAction(_entry: StoredAction): Promise<void> {}
+  async saveSnapshot(_snapshot: StoredSnapshot): Promise<void> {}
+  async loadLatestSnapshot(_roomId: string): Promise<StoredSnapshot | undefined> {
     return undefined;
   }
-  async loadActionsAfter(): Promise<StoredAction[]> {
+  async loadActionsAfter(_roomId: string, _seq: number): Promise<StoredAction[]> {
     return [];
   }
   async close(): Promise<void> {}

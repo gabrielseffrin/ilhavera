@@ -115,7 +115,19 @@ export async function startTestServer(options: BuildOptions = {}): Promise<TestS
         },
       };
 
-      // A identidade chega logo depois do connect, e só para quem é novo.
+      /**
+       * Quem chega com token já tem identidade, e o servidor não reemite — o
+       * `playerId` é a primeira parte do próprio token. Sem isto, todo cliente
+       * reconectado ficaria sem saber quem é, e o teste não teria como achar o
+       * jogador da vez.
+       */
+      if (token !== undefined) {
+        const separador = token.indexOf('.');
+        if (separador > 0) cliente.playerId = token.slice(0, separador);
+      }
+
+      // A identidade chega logo depois do connect, e só para quem é novo. Se
+      // vier, corrige o palpite acima — foi token inválido.
       socket.on('session:issued', (dados: { playerId: string; token: string }) => {
         cliente.token = dados.token;
         cliente.playerId = dados.playerId;

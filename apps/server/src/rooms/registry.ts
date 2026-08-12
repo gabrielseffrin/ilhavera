@@ -21,6 +21,7 @@ import { MAX_PLAYERS, MIN_PLAYERS, PLAYER_COLORS, type PlayerColor } from '@ilha
 
 import { GameRoom } from '../game/room.js';
 import type { PlayerId } from '../identity/players.js';
+import { restaurarSalas } from '../persistence/restore.js';
 import {
   gravarEmSegundoPlano,
   NullStore,
@@ -133,6 +134,56 @@ export class RoomRegistry {
       'saveRoom',
       this.#onWriteError,
     );
+  }
+
+  /**
+   * Traz de volta as partidas que estavam em andamento.
+   *
+   * Os apelidos vêm do estado do motor, não da tabela `players`: é o nome com
+   * que a pessoa entrou *naquela* partida, e é o que os outros jogadores estão
+   * vendo no tabuleiro. Trocar depois em `players` não pode renomear alguém no
+   * meio do jogo.
+   *
+   * Todo mundo volta como desconectado — ninguém está conectado a um processo
+   * que acabou de subir. A primeira reconexão corrige, pelo caminho que já
+   * existe em `connection.ts`.
+   */
+  async restore(onSkip: (roomId: string, motivo: string) => void): Promise<number> {
+    const restauradas = await restaurarSalas({
+      store: this.#store,
+      writes: this.#writes,
+      onWriteError: this.#onWriteError,
+      onSkip,
+    });
+
+    for (const { guardada, game } of restauradas) {
+      const doMotor = new Map(game.state.players.map((p) => [p.id, p.name]));
+
+      const room: Room = {
+        id: guardada.id,
+        code: guardada.code,
+        hostId: guardada.hostId,
+        status: 'playing',
+        seats: guardada.seats.map((s) => ({
+          playerId: s.playerId,
+          nickname: doMotor.get(s.playerId) ?? '',
+          color: s.color,
+          connected: false,
+        })),
+        settings: { ...guardada.settings },
+        game,
+        createdAt: guardada.createdAt,
+        lastActivityAt: this.#now(),
+      };
+
+      for (const seat of room.seats) {
+        game.setConnected(seat.playerId, false);
+        this.#byPlayer.set(seat.playerId, room.code);
+      }
+      this.#byCode.set(room.code, room);
+    }
+
+    return restauradas.length;
   }
 
   byCode(code: string): Room | undefined {

@@ -16,6 +16,13 @@ export default defineConfig({
         'src/main.ts',
         // Módulo só de tipos: o v8 reporta 0/0 como 0% e polui o relatório.
         'src/protocol/types.ts',
+        /**
+         * Sem banco não há como exercitar o adaptador de banco, e o relatório
+         * mediria a ausência do Postgres em vez da qualidade do código. O CI
+         * define `DATABASE_URL`, então lá ele **é** medido — que é o ponto:
+         * ninguém consegue mandar adaptador sem teste para o repositório.
+         */
+        ...(process.env['DATABASE_URL'] === undefined ? ['src/persistence/postgres.ts'] : []),
       ],
       reporter: ['text', 'html'],
       // Mais baixo que o do motor de propósito: aqui o que se testa é a borda
