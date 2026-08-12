@@ -8,7 +8,10 @@
  * `eslint.config.js` faz valer isso.
  */
 
+import type { ErrorCode } from '@ilhavera/rules';
 import { z } from 'zod';
+
+export * from './actions.js';
 
 export const RESOURCE = z.enum(['lumber', 'brick', 'wool', 'grain', 'ore']);
 export const RESOURCE_COUNT = z.object({
@@ -89,6 +92,12 @@ export type CommandName = keyof typeof COMMANDS;
 /** Payload já validado de um comando — o que o handler do servidor recebe. */
 export type CommandPayload<K extends CommandName> = z.infer<(typeof COMMANDS)[K]>;
 
+/**
+ * Todo comando carrega `requestId`. Ele precisa ser **único por jogador**:
+ * reusar um `requestId` numa jogada diferente faz a segunda ser silenciosamente
+ * ignorada e responder com o ack da primeira, que é justamente o que dá a
+ * idempotência na reconexão. `crypto.randomUUID()` no cliente resolve.
+ */
 export const ENVELOPE = z.object({ requestId: z.string().min(1) });
 
 /** Eventos servidor → cliente (§5.2). */
@@ -115,6 +124,12 @@ export type ServerEventName = (typeof SERVER_EVENTS)[number];
  */
 export const ROOM_ERROR_CODES = [
   'BAD_PAYLOAD',
+  /**
+   * O servidor errou — não é regra do jogo. Exceção escapando do motor é bug
+   * (ver `reduce.ts`), e sem este código o cliente ficaria sem ack nenhum,
+   * caindo no timeout: o pior diagnóstico possível.
+   */
+  'INTERNAL',
   'ROOM_NOT_FOUND',
   'ROOM_FULL',
   'ROOM_ALREADY_STARTED',
@@ -127,6 +142,14 @@ export const ROOM_ERROR_CODES = [
 ] as const;
 
 export type RoomErrorCode = (typeof ROOM_ERROR_CODES)[number];
+
+/**
+ * O que pode aparecer no `error` de um ack: erro de sala ou jogada rejeitada
+ * pelo motor. Serve para o servidor tipar as próprias respostas — o `Ack` segue
+ * declarando `error: string` de propósito, porque o cliente tem que tolerar um
+ * código que a versão dele ainda não conhece.
+ */
+export type AckErrorCode = RoomErrorCode | ErrorCode;
 
 /**
  * Resposta de comando. Carrega `data` porque `room:create` precisa devolver o
