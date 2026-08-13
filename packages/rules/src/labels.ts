@@ -7,6 +7,8 @@
  */
 
 import type { DevCard, PortType, Resource, Terrain } from './types.js';
+import type { ErrorCode } from './errors.js';
+import type { Phase } from './state.js';
 
 export const RESOURCE_LABELS: Readonly<Record<Resource, string>> = {
   lumber: 'Madeira',
@@ -38,6 +40,57 @@ export function portLabel(port: PortType): string {
 }
 
 /** O "Ladrão" do jogo clássico; aqui, Saqueador (§2). */
+export const PHASE_LABELS: Readonly<Record<Phase, string>> = {
+  lobby: 'Aguardando jogadores',
+  setup1: 'Preparação — 1ª rodada',
+  setup2: 'Preparação — 2ª rodada',
+  awaitingRoll: 'Aguardando rolagem',
+  discarding: 'Descarte',
+  movingRobber: 'Movendo o Saqueador',
+  main: 'Fase principal',
+  finished: 'Partida encerrada',
+};
+
+/**
+ * O motivo da recusa, em português, para a interface poder explicar em vez de
+ * só piscar em vermelho.
+ *
+ * `Record<ErrorCode, string>` e não um mapa parcial: código de erro novo sem
+ * rótulo não compila, que é a única forma de isto não apodrecer.
+ */
+export const ERROR_LABELS: Readonly<Record<ErrorCode, string>> = {
+  NOT_YOUR_TURN: 'Não é a sua vez.',
+  INVALID_PHASE: 'Esta jogada não cabe neste momento do turno.',
+  UNKNOWN_PLAYER: 'Jogador não está nesta partida.',
+  GAME_FINISHED: 'A partida já terminou.',
+  INSUFFICIENT_RESOURCES: 'Recursos insuficientes.',
+  DISTANCE_RULE_VIOLATION: 'Há um assentamento vizinho demais deste ponto.',
+  VERTEX_OCCUPIED: 'Já existe construção neste ponto.',
+  VERTEX_NOT_FOUND: 'Ponto inexistente no tabuleiro.',
+  EDGE_NOT_FOUND: 'Caminho inexistente no tabuleiro.',
+  EDGE_OCCUPIED: 'Já existe estrada neste caminho.',
+  HEX_NOT_FOUND: 'Hexágono inexistente no tabuleiro.',
+  ROAD_NOT_CONNECTED: 'A estrada precisa encostar em algo seu.',
+  SETTLEMENT_NOT_CONNECTED: 'O assentamento precisa encostar numa estrada sua.',
+  NO_PIECES_LEFT: 'Acabaram as peças deste tipo.',
+  NOT_YOUR_SETTLEMENT: 'Este assentamento não é seu.',
+  ALREADY_CITY: 'Aqui já é uma cidade.',
+  DEV_CARD_ALREADY_PLAYED: 'Você já jogou uma Carta de Progresso neste turno.',
+  DEV_CARD_BOUGHT_THIS_TURN: 'Esta carta foi comprada neste turno.',
+  DEV_CARD_NOT_OWNED: 'Você não tem esta carta.',
+  DEV_CARD_NOT_PLAYABLE: 'Esta carta não pode ser jogada.',
+  DEV_DECK_EMPTY: 'O baralho de Cartas de Progresso acabou.',
+  ROBBER_SAME_HEX: 'O Saqueador precisa mudar de hexágono.',
+  INVALID_STEAL_TARGET: 'Não dá para roubar deste jogador.',
+  BANK_DEPLETED: 'O banco não tem este recurso.',
+  INVALID_DISCARD: 'Descarte inválido.',
+  NOTHING_TO_DISCARD: 'Você não precisa descartar.',
+  INVALID_TRADE: 'Troca inválida.',
+  TRADE_EXPIRED: 'Esta proposta não está mais valendo.',
+  TRADE_NOT_ACCEPTED: 'Este jogador não aceitou a proposta.',
+  INVALID_ACTION: 'Jogada inválida.',
+};
+
 export const ROBBER_LABEL = 'Saqueador';
 export const LONGEST_ROAD_LABEL = 'Estrada Mais Longa';
 export const LARGEST_ARMY_LABEL = 'Maior Exército';
