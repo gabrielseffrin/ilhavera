@@ -312,6 +312,97 @@ describe('state:patch', () => {
   });
 });
 
+describe('state:resync', () => {
+  it('devolve o estado completo a quem pediu, no ack e como evento', async () => {
+    const p = await partida(3);
+    const { acao, cliente } = daVez(p);
+    const { nome, payload } = comandoDe(acao);
+    await cliente.send(nome, payload);
+
+    const chegando = cliente.next<ClientView>('state:snapshot');
+    const ack = await cliente.send<ClientView>('state:resync');
+    const evento = await chegando;
+
+    expect(ack.ok).toBe(true);
+    if (!ack.ok) return;
+    expect(ack.data.version).toBe(1);
+    expect(ack.data.you?.id).toBe(cliente.playerId);
+    expect(evento).toEqual(ack.data);
+  });
+
+  it('vai só para quem pediu — os outros não recebem nada', async () => {
+    const p = await partida(3);
+    const [ana, bruno] = p.clientes;
+    if (ana === undefined || bruno === undefined) throw new Error('mesa incompleta');
+
+    // O snapshot do `room:start` ainda pode estar em voo; o contador só vale a
+    // partir de um silêncio.
+    await new Promise((r) => setTimeout(r, 50));
+
+    let recebidosPorBruno = 0;
+    bruno.socket.on('state:snapshot', () => {
+      recebidosPorBruno += 1;
+    });
+
+    await ana.send('state:resync');
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(recebidosPorBruno).toBe(0);
+  });
+
+  it('respeita a fronteira de informação como qualquer outro snapshot', async () => {
+    const p = await partida(3);
+    const [ana] = p.clientes;
+    if (ana === undefined) throw new Error('sem Ana');
+
+    const ack = await ana.send<ClientView>('state:resync');
+    expect(ack.ok).toBe(true);
+    if (!ack.ok) return;
+
+    for (const jogador of ack.data.players) {
+      if (jogador.id === ana.playerId) continue;
+      expect(jogador).not.toHaveProperty('resources');
+      expect(jogador).not.toHaveProperty('devCards');
+    }
+    expect(ack.data as unknown as Record<string, unknown>).not.toHaveProperty('devDeck');
+  });
+
+  it('recusa quem não está em sala ou cuja partida não começou', async () => {
+    atual = await startTestServer();
+    const cliente = await atual.connect();
+
+    expect(await cliente.send('state:resync')).toEqual({ ok: false, error: 'NOT_IN_ROOM' });
+
+    await cliente.send('room:create', { nickname: 'Ana' });
+    expect(await cliente.send('state:resync')).toEqual({
+      ok: false,
+      error: 'ROOM_NOT_STARTED',
+    });
+  });
+
+  it('depois de perder patches, o resync recoloca o cliente na versão certa', async () => {
+    const p = await partida(3);
+
+    // Simula o cliente surdo: para de escutar `state:patch` e a partida anda.
+    for (const c of p.clientes) c.socket.off('state:patch');
+    for (let i = 0; i < 4; i++) {
+      const { acao, cliente } = daVez(p);
+      const { nome, payload } = comandoDe(acao);
+      await cliente.send(nome, payload);
+    }
+
+    const [ana] = p.clientes;
+    if (ana === undefined) throw new Error('sem Ana');
+
+    const ack = await ana.send<ClientView>('state:resync');
+
+    expect(ack.ok).toBe(true);
+    if (!ack.ok) return;
+    expect(ack.data.version).toBe(4);
+    expect(ack.data.version).toBe(p.game().version);
+  });
+});
+
 describe('game:error', () => {
   it('vai só para quem enviou o comando recusado', async () => {
     const p = await partida(3);

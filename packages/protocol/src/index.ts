@@ -85,6 +85,17 @@ export const COMMANDS = {
   'game:endTurn': z.object({}),
 
   'chat:send': z.object({ text: z.string().min(1).max(500) }),
+
+  /**
+   * "Perdi o fio, me manda o estado inteiro" — a regra de consistência de §5.2.
+   * O cliente pede quando vê um salto de versão entre dois `state:patch`, e o
+   * servidor responde com um `state:snapshot`.
+   *
+   * É comando e não evento porque quem sabe que perdeu algo é o cliente: o
+   * servidor não tem como distinguir um patch que não chegou de um patch que
+   * chegou e ainda não foi processado.
+   */
+  'state:resync': z.object({}),
 } as const;
 
 export type CommandName = keyof typeof COMMANDS;
@@ -139,6 +150,12 @@ export const ROOM_ERROR_CODES = [
   'ALREADY_IN_ROOM',
   'NOT_IN_ROOM',
   'NICKNAME_TAKEN',
+  /**
+   * Comandos rápidos demais neste socket. Não é castigo: é o que impede um
+   * cliente com laço maluco — ou alguém tentando de propósito — de consumir a
+   * fila de uma sala e travar a partida dos outros.
+   */
+  'RATE_LIMITED',
 ] as const;
 
 export type RoomErrorCode = (typeof ROOM_ERROR_CODES)[number];

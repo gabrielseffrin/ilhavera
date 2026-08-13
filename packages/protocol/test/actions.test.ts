@@ -144,10 +144,12 @@ describe('cobertura da tabela', () => {
     expect([...GAME_COMMANDS].sort()).toEqual([...declarados].sort());
   });
 
-  it('isGameCommand separa as três famílias de comando', () => {
+  it('isGameCommand separa as famílias de comando', () => {
     expect(isGameCommand('game:rollDice')).toBe(true);
     expect(isGameCommand('room:create')).toBe(false);
     expect(isGameCommand('chat:send')).toBe(false);
+    // `state:resync` fala de estado mas não é jogada: não vira ação do motor.
+    expect(isGameCommand('state:resync')).toBe(false);
   });
 
   it('toda ação traduzida leva o jogador que enviou o comando', () => {

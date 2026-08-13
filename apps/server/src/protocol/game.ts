@@ -54,8 +54,8 @@ export function emitSnapshotTo(socket: GameSocket, room: Room): void {
 
 /**
  * O delta de uma jogada (§5.2). `version` vai junto porque é ela que deixa o
- * cliente perceber que perdeu um patch e pedir estado inteiro — a "regra de
- * consistência" de §5.2. O `state:resync` que fecha esse ciclo é da M6.
+ * cliente perceber que perdeu um patch e pedir `state:resync` — a "regra de
+ * consistência" de §5.2.
  */
 export function emitPatch(io: GameServer, room: Room, events: readonly GameEvent[]): void {
   const game = room.game;
@@ -71,6 +71,30 @@ export function emitPatch(io: GameServer, room: Room, events: readonly GameEvent
 }
 
 export function registerGameCommands(socket: GameSocket, deps: GameDeps): void {
+  /**
+   * `state:resync` — o outro lado da regra de consistência de §5.2.
+   *
+   * Vai para o socket que pediu, não para a sala: quem perdeu o fio foi esta
+   * conexão. E devolve o estado no ack **e** como `state:snapshot`, porque o
+   * cliente pode ter pedido por dois motivos diferentes — um salto de versão
+   * que ele quer resolver na hora (ack) ou uma releitura geral que o store dele
+   * consome pelo mesmo caminho de sempre (evento).
+   */
+  handle(
+    socket,
+    'state:resync',
+    (_payload, playerId) => {
+      const room = deps.rooms.byPlayer(playerId);
+      if (room === undefined) return { ok: false, error: 'NOT_IN_ROOM' };
+      if (room.game === null) return { ok: false, error: 'ROOM_NOT_STARTED' };
+
+      const view = room.game.view(playerId);
+      socket.emit('state:snapshot', view);
+      return { ok: true, data: view };
+    },
+    deps.log,
+  );
+
   /**
    * Uma chamada literal por comando, e não um laço sobre a lista.
    *
