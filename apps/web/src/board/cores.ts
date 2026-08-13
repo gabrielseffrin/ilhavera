@@ -7,7 +7,7 @@
  * se separar entre si **e** dos terrenos, senão uma estrada some no fundo.
  */
 
-import type { PlayerColor, Terrain } from '@ilhavera/rules';
+import type { PlayerColor, Resource, Terrain } from '@ilhavera/rules';
 
 export const COR_DO_TERRENO: Readonly<Record<Terrain, string>> = {
   forest: 'oklch(0.42 0.09 150)',
@@ -43,6 +43,21 @@ export const CONTORNO_DO_JOGADOR: Readonly<Record<PlayerColor, string>> = {
 };
 
 export const COR_DO_MAR = 'oklch(0.62 0.13 236)';
+
+/**
+ * Cor de cada recurso na mão e nos modais.
+ *
+ * Aponta para as variáveis declaradas em `index.css` em vez de repetir os
+ * valores: um recurso tem uma cor só no projeto inteiro, e duas listas de
+ * oklch em arquivos diferentes divergem no primeiro ajuste de contraste.
+ */
+export const COR_DO_RECURSO: Readonly<Record<Resource, string>> = {
+  lumber: 'var(--color-madeira)',
+  brick: 'var(--color-tijolo)',
+  wool: 'var(--color-la)',
+  grain: 'var(--color-trigo)',
+  ore: 'var(--color-minerio)',
+};
 
 /**
  * 6 e 8 saem em vermelho porque são os números mais prováveis — é informação de

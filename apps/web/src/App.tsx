@@ -5,6 +5,14 @@
  * e o HUD possam ser construídos sem depender do servidor — é o item "modo
  * hot-seat local" da Fase 3. A ligação com o socket é a Fase 4; o contrato já
  * existe desde a Fase 2 e só o store muda.
+ *
+ * Aqui só há composição. Tudo o que a tela mostra sai de `mesa`, a projeção do
+ * jogador ativo, e nenhum componente abaixo daqui conhece `GameState`.
+ *
+ * Sobre o layout: `min-h-0` aparece em toda a cadeia de flex de propósito. Sem
+ * ele o `overflow-y-auto` do log não segura nada e a página inteira cresce até
+ * empurrar o tabuleiro para fora da tela — é o tropeço clássico de flexbox
+ * aninhado, e custa caro descobrir depois.
  */
 
 import { useMemo } from 'react';
@@ -14,23 +22,23 @@ import { CamadaInterativa } from './board/CamadaInterativa.js';
 import { Pecas } from './board/Pecas.js';
 import { Tabuleiro } from './board/Tabuleiro.js';
 import { BarraDeAcoes } from './hud/BarraDeAcoes.js';
-import { jogadasLegais, jogadorAtivo, usePartida } from './estado/partida.js';
+import { PainelLateral } from './hud/PainelLateral.js';
+import { usePartida } from './estado/partida.js';
 
 export function App(): React.JSX.Element {
-  const jogo = usePartida((s) => s.jogo);
+  const mesa = usePartida((s) => s.mesa);
+  const ativo = usePartida((s) => s.ativo);
+  const legais = usePartida((s) => s.legais);
   const erro = usePartida((s) => s.erro);
   const executar = usePartida((s) => s.executar);
   const reiniciar = usePartida((s) => s.reiniciar);
 
-  const legais = useMemo(() => jogadasLegais(jogo), [jogo]);
-  const ativo = jogadorAtivo(jogo);
-
   const cores = useMemo(
-    () => Object.fromEntries(jogo.players.map((p) => [p.id, p.color])),
-    [jogo.players],
+    () => Object.fromEntries(mesa.players.map((p) => [p.id, p.color])),
+    [mesa.players],
   );
 
-  const jogador = jogo.players.find((p) => p.id === ativo);
+  const jogador = mesa.players.find((p) => p.id === ativo);
 
   return (
     <main className="flex h-full flex-col gap-3 p-4">
@@ -39,7 +47,7 @@ export function App(): React.JSX.Element {
         <span className="text-sm text-white/80">hot-seat local</span>
 
         <span className="ml-auto text-sm text-white/90">
-          {PHASE_LABELS[jogo.phase]} · turno {jogo.turnNumber}
+          {PHASE_LABELS[mesa.phase]} · turno {mesa.turnNumber}
         </span>
         <button
           type="button"
@@ -58,19 +66,32 @@ export function App(): React.JSX.Element {
         </p>
       )}
 
-      {erro !== null && (
-        <p role="alert" className="rounded-lg bg-red-950/80 px-3 py-2 text-sm text-red-50">
-          {ERROR_LABELS[erro]}
-        </p>
-      )}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+        <section className="flex min-h-0 flex-1 flex-col gap-2">
+          <div className="min-h-0 flex-1">
+            <Tabuleiro estado={mesa}>
+              <Pecas
+                board={mesa.board}
+                buildings={mesa.buildings}
+                roads={mesa.roads}
+                cores={cores}
+              />
+              <CamadaInterativa board={mesa.board} legais={legais} onEscolher={executar} />
+            </Tabuleiro>
+          </div>
 
-      <BarraDeAcoes legais={legais} onEscolher={executar} />
+          {/* A barra e o alerta ficam junto do tabuleiro: o erro precisa
+              aparecer onde se errou, não do outro lado da tela. */}
+          <BarraDeAcoes legais={legais} onEscolher={executar} />
 
-      <div className="min-h-0 flex-1">
-        <Tabuleiro estado={jogo}>
-          <Pecas board={jogo.board} buildings={jogo.buildings} roads={jogo.roads} cores={cores} />
-          <CamadaInterativa board={jogo.board} legais={legais} onEscolher={executar} />
-        </Tabuleiro>
+          {erro !== null && (
+            <p role="alert" className="rounded-lg bg-red-950/80 px-3 py-2 text-sm text-red-50">
+              {ERROR_LABELS[erro]}
+            </p>
+          )}
+        </section>
+
+        <PainelLateral mesa={mesa} ativo={ativo} />
       </div>
     </main>
   );
