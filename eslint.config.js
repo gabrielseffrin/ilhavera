@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 /**
  * Lista de builtins do Node. Usada para impedir que o motor de regras
@@ -121,6 +122,19 @@ export default tseslint.config(
           message: 'Não-determinístico. O motor não conhece tempo.',
         },
       ],
+    },
+  },
+
+  /**
+   * O cliente web. As regras dos hooks não são estilo: `useEffect` com lista de
+   * dependências errada vira tabuleiro que não redesenha, e é o tipo de bug que
+   * some quando se procura e volta na demonstração.
+   */
+  {
+    files: ['apps/web/**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
     },
   },
 

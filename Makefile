@@ -1,4 +1,4 @@
-.PHONY: up down sh install lint typecheck test test-watch coverage heavy play demo dev build clean logs
+.PHONY: up down sh install lint typecheck test test-watch coverage heavy play demo dev web build clean logs
 
 COMPOSE := docker compose
 EXEC := $(COMPOSE) exec app
@@ -48,6 +48,10 @@ demo:
 ## Servidor de jogo em modo watch, na porta 3000 do host
 dev:
 	$(EXEC) pnpm --filter @ilhavera/server dev
+
+## Cliente web em modo watch, na porta 5173 do host
+web:
+	$(EXEC) pnpm --filter @ilhavera/web dev
 
 build:
 	$(EXEC) pnpm build

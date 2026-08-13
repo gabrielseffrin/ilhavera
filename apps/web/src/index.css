@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+
+/**
+ * O tabuleiro é um SVG que escala pelo viewBox; o resto da interface é Tailwind.
+ * Só o que não cabe em classe utilitária mora aqui.
+ */
+
+@theme {
+  --color-mar: oklch(0.62 0.13 236);
+  --color-madeira: oklch(0.45 0.09 145);
+  --color-tijolo: oklch(0.58 0.14 40);
+  --color-la: oklch(0.82 0.11 130);
+  --color-trigo: oklch(0.85 0.13 90);
+  --color-minerio: oklch(0.55 0.03 260);
+  --color-deserto: oklch(0.84 0.05 85);
+}
+
+html,
+body,
+#raiz {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-mar);
+}
