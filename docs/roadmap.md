@@ -371,7 +371,9 @@ Todos os comandos carregam um `requestId` (idempotência) e são respondidos com
 
 `game:error` vai só ao socket que enviou o comando recusado, e não se repete em reenvio deduplicado. É redundante com o `ack` de propósito: o `ack` é a resposta autoritativa, o evento é a cópia para o log da interface, que assina um fluxo só.
 
-`state:resync` ainda não existe — é da M6, junto do reenvio pós-reconexão. Hoje quem reconecta recebe um `state:snapshot` inteiro sem pedir.
+`state:resync` (M6) é **comando**, e não evento, porque quem sabe que perdeu algo é o cliente: o servidor não distingue um patch que não chegou de um que chegou e ainda não foi processado. Responde no ack e como `state:snapshot`, e vai só ao socket que pediu. Quem reconecta recebe o snapshot sem precisar pedir; o `state:resync` é para o salto de versão percebido com a conexão de pé.
+
+Todo comando passa por um limite de ritmo por socket (M7): `RATE_LIMITED` no ack quando o balde esvazia. O limite é cobrado **antes** da validação, então quem atropela com payload inválido ouve sobre o ritmo, não sobre o payload.
 
 ### 5.3 Códigos de erro (exemplos)
 
@@ -578,9 +580,9 @@ Premissa de estimativa: **1 desenvolvedor, meio período (~12h/semana)**. Com de
 - [x] **CLI de partida hot-seat no terminal** para jogar uma partida completa sem UI — `apps/cli/`, menu montado a partir de `enumerateLegalActions`
 - **Aceite:** ✅ partida completa jogável pelo terminal (`make play`, `make demo`); 10.000 partidas aleatórias sem violar invariantes — `make heavy` em 11/08/2026, 10 testes passando em 21min (1.259s), invariantes checados **após cada ação** de cada partida, mais mesas de 3 jogadores e modo de tabuleiro aleatório puro, mais 2.000 runs de replay determinístico
 
-### Fase 2 — Servidor e protocolo (2 semanas)
+### Fase 2 — Servidor e protocolo (2 semanas) ✅
 
-Os sub-marcos M1–M7 abaixo são a ordem em que a fase é entregue, e aparecem nas mensagens de commit.
+Os sub-marcos M1–M7 abaixo são a ordem em que a fase foi entregue, e aparecem nas mensagens de commit.
 
 - [x] **M1** — Fastify + Socket.IO, health check — `apps/server/src/app.ts`
 - [x] **M2** — Identidade de jogador por token no localStorage — `src/identity/players.ts` (token opaco `id.segredo`, verificação com SHA-256 e `timingSafeEqual`)
@@ -589,11 +591,11 @@ Os sub-marcos M1–M7 abaixo são a ordem em que a fase é entregue, e aparecem 
 - [x] **M3** — Validação de payload com zod na borda — `src/protocol/handle.ts`, tradução comando→ação em `packages/protocol/src/actions.ts`
 - [x] **M4** — Broadcast de `state:patch` + `state:snapshot` — `src/protocol/game.ts` (emitidos **por jogador**, sempre pela projeção; nunca `io.to(code)` com estado cru)
 - [x] **M5** — Persistência: snapshots + `game_actions` — `src/persistence/` (porta com dois adaptadores; migração Drizzle aplicada no boot; restauração por snapshot + replay)
-- [ ] **M6** — Reconexão com resync (`state:resync` ainda não existe; hoje a reconexão recebe `state:snapshot` inteiro)
-- [ ] **M7** — Rate limit por socket
-- **Aceite:** dois clientes de teste (scripts Node) jogam uma partida completa via WebSocket; matar o servidor no meio e subir de novo restaura a partida
-  - ✅ **restauração** (12/08/2026): `apps/server/test/restore.test.ts` mata o servidor no meio, sobe outro do mesmo banco e a mesa termina o setup pela rede. Roda contra as duas lojas — só o Postgres prova que o estado atravessa o JSONB.
-  - Parcial: os clientes de teste completam o **setup** (12 jogadas), não a partida inteira. Falta a partida completa, que depende de rolagem de dados e comércio pela rede — nada de novo no servidor, só extensão do roteiro de teste.
+- [x] **M6** — Reconexão com resync — reconexão devolve `state:snapshot` sem pedir; `state:resync` atende quando o cliente detecta salto de versão
+- [x] **M7** — Rate limit por socket — `src/protocol/rate-limit.ts` (balde de fichas, 30 de rajada e 10/s por padrão, configurável)
+- **Aceite:** ✅ **concluído em 12/08/2026**
+  - **partida completa via WebSocket** — `apps/server/test/full-game.test.ts`: quatro partidas do lobby ao vencedor, ~500 jogadas cada, só por socket. Juntas exercitam quinze tipos de ação, incluindo descarte paralelo e comércio entre jogadores (propor → responder → confirmar).
+  - **queda no meio da partida** — `apps/server/test/restore.test.ts`: mata o servidor, sobe outro do mesmo banco e a mesa termina o setup pela rede. Roda contra as duas lojas; só o Postgres prova que o estado atravessa o JSONB.
 
 #### O que a M5 grava, e quando
 
@@ -609,7 +611,18 @@ Só as escritas da partida são esperadas — era para isso que a fila da M3 exi
 
 `PlayerState.connected` fica fora do banco de propósito: é estado de runtime, e gravar a cada desconexão daria tempestade de escrita sem nada em troca. Quem volta de um reinício volta como desconectado, e a primeira reconexão corrige.
 
-Fora do escopo desta fase, por decisão: chat na sala (Fase 5) e a expiração de salas do ADR-003 — `Room.lastActivityAt` é escrito e ainda não é lido.
+#### Dívida assumida ao fechar a fase
+
+Nada disto bloqueia a Fase 3, e cada item está aqui porque foi decidido, não esquecido.
+
+| Pendência                                                                | Onde                                        | Quando                                       |
+| ------------------------------------------------------------------------ | ------------------------------------------- | -------------------------------------------- |
+| Chat na sala (`chat:send`/`chat:message` estão no contrato, sem handler) | `packages/protocol`                         | Fase 5, como o roadmap prevê                 |
+| Expiração de salas (30 min / 24 h do ADR-003)                            | `Room.lastActivityAt`, escrito e nunca lido | quando houver operação de verdade a proteger |
+| `game:event` declarado e não emitido                                     | `SERVER_EVENTS`                             | sai do contrato se a Fase 3 não pedir        |
+| `game_results` de §7 não criada                                          | `src/persistence/schema.ts`                 | com a tela de fim de jogo (Fase 5)           |
+| Limite por IP, para quem abre mil sockets                                | —                                           | Fase 6, junto do proxy                       |
+| Adapter Redis do Socket.IO (`InterServerEvents` vazio)                   | `src/protocol/types.ts`                     | só ao escalar para mais de um nó             |
 
 ### Fase 3 — Cliente: tabuleiro e HUD (3–4 semanas)
 
