@@ -87,21 +87,21 @@ describe('barra de ações', () => {
   it('fica escondida enquanto só houver jogada de tabuleiro', () => {
     render(<App />);
     // No setup só se coloca peça: rolar e encerrar ainda não existem.
-    expect(screen.queryByRole('button', { name: 'Rolar dados' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rolar os dados' })).not.toBeInTheDocument();
   });
 
   it('mostra rolar dados quando o setup termina', async () => {
     const { container } = render(<App />);
     for (let i = 0; i < 12; i++) await clicarNoPrimeiroDestaque(container);
 
-    expect(screen.getByRole('button', { name: 'Rolar dados' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rolar os dados' })).toBeInTheDocument();
   });
 
   it('rolar dados avança a partida', async () => {
     const { container } = render(<App />);
     for (let i = 0; i < 12; i++) await clicarNoPrimeiroDestaque(container);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Rolar dados' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Rolar os dados' }));
 
     const jogo = usePartida.getState().jogo;
     expect(jogo.lastRoll).not.toBeNull();

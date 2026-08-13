@@ -1,57 +1,73 @@
 /**
- * As jogadas que não têm lugar no tabuleiro: rolar, comprar carta, encerrar.
+ * As jogadas que não têm lugar no tabuleiro: rolar, comprar, comerciar, jogar
+ * carta, encerrar.
  *
- * Cada botão só aparece quando a ação correspondente está na lista de legais.
- * Botão desabilitado que ninguém sabe por que está desabilitado é pior que
- * botão ausente — e a lista de legais já sabe a resposta.
+ * Uma regra só decide o comportamento de todos os botões: **grupo com uma opção
+ * dispara direto, grupo com várias abre uma escolha.** Isso resolve rolar
+ * (1 jogada), Monopólio (5), Descoberta (15 pares) e comércio com o banco (20
+ * pares) sem uma lista de exceções, e é o mesmo desenho de dois níveis que a
+ * CLI já provou ao longo de umas quinhentas jogadas por partida de teste.
+ *
+ * Botão que não aparece em vez de botão desabilitado: só se mostra o que está
+ * na lista de legais. Botão cinza que ninguém sabe por que está cinza é pior
+ * que botão ausente, e a lista já sabe a resposta.
+ *
+ * Descarte e Saqueador ficam de fora: um é modal obrigatório, o outro se
+ * escolhe no tabuleiro. Nem um nem outro é uma opção a se considerar.
  */
 
-import type { Action } from '@ilhavera/rules';
+import { ACTION_LABELS, groupActions, type Action, type ActionType } from '@ilhavera/rules';
 
 export type BarraDeAcoesProps = {
   legais: readonly Action[];
+  /** Grupo de uma opção só. */
   onEscolher: (acao: Action) => void;
+  /** Grupo com várias — quem monta decide qual modal abrir. */
+  onAbrir: (tipo: ActionType) => void;
 };
 
-const ROTULOS: Partial<Record<Action['type'], string>> = {
-  rollDice: 'Rolar dados',
-  buyDevCard: 'Comprar Carta de Progresso',
-  endTurn: 'Encerrar turno',
-  playKnight: 'Jogar Soldado',
-  playRoadBuilding: 'Jogar Construção de Estradas',
-};
-
-/** A ordem em que aparecem, independente da ordem do enumerador. */
-const ORDEM: Action['type'][] = [
-  'rollDice',
-  'buyDevCard',
-  'playKnight',
-  'playRoadBuilding',
-  'endTurn',
+/** Não têm botão aqui: pertencem ao tabuleiro ou a um modal obrigatório. */
+const FORA_DA_BARRA: ActionType[] = [
+  'placeSettlement',
+  'placeRoad',
+  'buildCity',
+  'discard',
+  'moveRobber',
 ];
 
-export function BarraDeAcoes({ legais, onEscolher }: BarraDeAcoesProps): React.JSX.Element | null {
-  const disponiveis = ORDEM.map((tipo) => ({
-    tipo,
-    acao: legais.find((a) => a.type === tipo),
-  })).filter((item): item is { tipo: Action['type']; acao: Action } => item.acao !== undefined);
+export function BarraDeAcoes({
+  legais,
+  onEscolher,
+  onAbrir,
+}: BarraDeAcoesProps): React.JSX.Element | null {
+  const grupos = groupActions(legais).filter((g) => !FORA_DA_BARRA.includes(g.type));
 
-  if (disponiveis.length === 0) return null;
+  if (grupos.length === 0) return null;
 
   return (
     <div className="flex flex-wrap gap-2" data-testid="barra-de-acoes">
-      {disponiveis.map(({ tipo, acao }) => (
-        <button
-          key={tipo}
-          type="button"
-          onClick={() => {
-            onEscolher(acao);
-          }}
-          className="rounded-lg bg-white/95 px-3 py-2 text-sm font-medium text-slate-800 shadow transition hover:bg-white"
-        >
-          {ROTULOS[tipo] ?? tipo}
-        </button>
-      ))}
+      {grupos.map(({ type, actions }) => {
+        const unica = actions.length === 1 ? actions[0] : undefined;
+
+        return (
+          <button
+            key={type}
+            type="button"
+            data-acao={type}
+            data-opcoes={actions.length}
+            onClick={() => {
+              if (unica !== undefined) onEscolher(unica);
+              else onAbrir(type);
+            }}
+            className="rounded-lg bg-white/95 px-3 py-2 text-sm font-medium text-slate-800 shadow transition hover:bg-white"
+          >
+            {ACTION_LABELS[type]}
+            {unica === undefined && (
+              <span className="ml-1 text-xs text-slate-500">({actions.length})</span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
