@@ -41,8 +41,9 @@ export function buildServer(config: Config, options: BuildOptions = {}): AppServ
     logger: { level: config.LOG_LEVEL },
     /**
      * A Fase 6 põe Traefik/Caddy na frente. Sem isto, todo cliente chega com o
-     * IP do proxy — e o rate limit por socket da M7 acabaria medindo o proxy em
-     * vez da pessoa.
+     * IP do proxy — e qualquer defesa por endereço mediria o proxy em vez da
+     * pessoa. O limite da M7 é por socket e não depende disto; um limite por
+     * IP, para conter quem abre mil conexões, depende.
      */
     trustProxy: true,
     /**
@@ -90,7 +91,15 @@ export function buildServer(config: Config, options: BuildOptions = {}): AppServ
     rooms: rooms.size,
   }));
 
-  registerHandlers(io, { players, rooms, log: fastify.log });
+  registerHandlers(io, {
+    players,
+    rooms,
+    log: fastify.log,
+    rateLimit: {
+      capacity: config.RATE_LIMIT_BURST,
+      refillPerSecond: config.RATE_LIMIT_PER_SECOND,
+    },
+  });
 
   /** Rede de segurança para quem chamar `fastify.close()` sem passar por `close()`. */
   fastify.addHook('onClose', (_instance, done) => {

@@ -14,6 +14,7 @@ import type { Server as IOServer, Socket } from 'socket.io';
 import type { Ack, CommandName, ServerEventName } from '@ilhavera/protocol';
 
 import type { PlayerId } from '../identity/players.js';
+import type { RateLimiter } from './rate-limit.js';
 
 /** O `ack` é opcional em tempo de execução: um cliente pode disparar e esquecer. */
 export type ClientToServerEvents = Record<
@@ -30,6 +31,11 @@ export type SessionData = {
   playerId: PlayerId;
   /** Presente só na conexão que acabou de ganhar identidade nova. */
   issuedToken?: string;
+  /**
+   * O balde de fichas desta conexão. Mora aqui porque o limite é por socket:
+   * criado no handshake, morre com a desconexão, sem mapa global para limpar.
+   */
+  limiter: RateLimiter;
 };
 
 export type GameServer = IOServer<

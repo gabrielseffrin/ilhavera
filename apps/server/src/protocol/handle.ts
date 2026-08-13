@@ -44,6 +44,17 @@ export function handle<K extends CommandName>(
   const ouvinte: Ouvinte = (raw, ack) => {
     const responder = ack ?? ((): void => {});
 
+    /**
+     * Antes de qualquer validação, de propósito: o ponto do limite é gastar o
+     * mínimo possível com quem está atropelando. Um cliente enlouquecido
+     * mandando lixo recebe `RATE_LIMITED` em vez de `BAD_PAYLOAD`, e está certo
+     * assim — o problema dele é o ritmo, não o payload.
+     */
+    if (!socket.data.limiter.tentar()) {
+      responder({ ok: false, error: 'RATE_LIMITED' });
+      return;
+    }
+
     const envelope = ENVELOPE.safeParse(raw);
     if (!envelope.success) {
       responder({ ok: false, error: 'BAD_PAYLOAD' });

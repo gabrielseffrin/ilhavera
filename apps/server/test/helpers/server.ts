@@ -45,15 +45,28 @@ export type TestServer = {
 
 let contadorDeRequisicao = 0;
 
-export async function startTestServer(options: BuildOptions = {}): Promise<TestServer> {
+export type TestServerOptions = BuildOptions & {
+  /** Sobrepõe o ambiente — o teste de rate limit aperta o balde por aqui. */
+  env?: NodeJS.ProcessEnv;
+};
+
+export async function startTestServer(options: TestServerOptions = {}): Promise<TestServer> {
+  const { env, ...build } = options;
   const config = loadConfig({
     PORT: '0',
     HOST: '127.0.0.1',
     NODE_ENV: 'test',
     LOG_LEVEL: 'silent',
+    /**
+     * Limite folgado por padrão: o teste que quer medi-lo aperta de propósito,
+     * e os outros não deveriam ficar vermelhos por rajada de setup.
+     */
+    RATE_LIMIT_BURST: '10000',
+    RATE_LIMIT_PER_SECOND: '10000',
+    ...env,
   });
 
-  const server = buildServer(config, options);
+  const server = buildServer(config, build);
   const { port } = await server.listen();
   const url = `http://127.0.0.1:${port}`;
 

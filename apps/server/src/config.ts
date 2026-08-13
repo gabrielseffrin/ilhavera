@@ -28,6 +28,13 @@ const ENV = z.object({
    * na prática, e a ausência aparece no log da subida.
    */
   DATABASE_URL: z.string().min(1).optional(),
+  /**
+   * Limite de comandos por socket (M7). Os padrões são folgados para gente e
+   * apertados para laço: uma pessoa construindo três coisas seguidas manda uns
+   * dez comandos em poucos segundos e nunca encosta no teto.
+   */
+  RATE_LIMIT_BURST: z.coerce.number().int().min(1).default(30),
+  RATE_LIMIT_PER_SECOND: z.coerce.number().positive().default(10),
 });
 
 export type Config = z.infer<typeof ENV>;

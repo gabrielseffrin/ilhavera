@@ -11,6 +11,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { PlayerDirectory } from '../identity/players.js';
 import type { RoomRegistry } from '../rooms/registry.js';
 import { emitSnapshotTo, registerGameCommands } from './game.js';
+import { RateLimiter, type RateLimitOptions } from './rate-limit.js';
 import { broadcastRoom, registerRoomCommands } from './rooms.js';
 import type { GameServer } from './types.js';
 
@@ -18,10 +19,11 @@ export type HandlerDeps = {
   players: PlayerDirectory;
   rooms: RoomRegistry;
   log: FastifyBaseLogger;
+  rateLimit: RateLimitOptions;
 };
 
 export function registerHandlers(io: GameServer, deps: HandlerDeps): void {
-  const { players, rooms, log } = deps;
+  const { players, rooms, log, rateLimit } = deps;
 
   /**
    * Handshake: quem chega com token válido volta a ser quem era; quem chega sem
@@ -33,11 +35,15 @@ export function registerHandlers(io: GameServer, deps: HandlerDeps): void {
     const token: unknown = socket.handshake.auth?.['token'];
     const conhecido = players.verify(token);
 
+    // Um balde por conexão, criado aqui: nasce e morre com o socket, então não
+    // há mapa global de limites para alguém esquecer de limpar.
+    const limiter = new RateLimiter(rateLimit);
+
     if (conhecido !== null) {
-      socket.data = { playerId: conhecido };
+      socket.data = { playerId: conhecido, limiter };
     } else {
       const nova = players.issue();
-      socket.data = { playerId: nova.id, issuedToken: nova.token };
+      socket.data = { playerId: nova.id, issuedToken: nova.token, limiter };
     }
     next();
   });
