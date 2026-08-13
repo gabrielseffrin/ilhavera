@@ -624,18 +624,68 @@ Nada disto bloqueia a Fase 3, e cada item está aqui porque foi decidido, não e
 | Limite por IP, para quem abre mil sockets                                | —                                           | Fase 6, junto do proxy                       |
 | Adapter Redis do Socket.IO (`InterServerEvents` vazio)                   | `src/protocol/types.ts`                     | só ao escalar para mais de um nó             |
 
-### Fase 3 — Cliente: tabuleiro e HUD (3–4 semanas)
+### Fase 3 — Cliente: tabuleiro e HUD (3–4 semanas) ✅
 
-- [ ] Layout SVG do tabuleiro com coordenadas pré-calculadas
-- [ ] Renderização de hexágonos, fichas numéricas, portos, Saqueador
-- [ ] Camadas interativas de vértices e arestas com destaque de jogadas válidas (usando `@game/rules` local)
-- [ ] Peças (estradas, assentamentos, cidades) por cor de jogador
-- [ ] Painel de mão de recursos e cartas de progresso
-- [ ] Painel de adversários (contagem de cartas, PV público, bônus)
-- [ ] Dados animados e log de eventos textual
-- [ ] Modais: descarte, escolha de alvo do roubo, Monopólio, Descoberta
-- [ ] Modo hot-seat local (contra o motor no browser) para desenvolver sem servidor
-- **Aceite:** partida completa jogável em hot-seat no navegador
+- [x] Layout SVG do tabuleiro com coordenadas pré-calculadas — `apps/web/src/board/{Tabuleiro,geometria}.tsx` (o `viewBox` vem dos hexágonos, então o tabuleiro de 5–6 jogadores de §1 já cabe)
+- [x] Renderização de hexágonos, fichas numéricas, portos, Saqueador — `src/board/{Hexagono,Portos,Saqueador}.tsx`
+- [x] Camadas interativas de vértices e arestas com destaque de jogadas válidas — `src/board/CamadaInterativa.tsx`, alimentada por `enumerateLegalActions`
+- [x] Peças (estradas, assentamentos, cidades) por cor de jogador — `src/board/Pecas.tsx`
+- [x] Painel de mão de recursos e cartas de progresso — `src/hud/PainelDaMao.tsx`
+- [x] Painel de adversários (contagem de cartas, PV público, bônus) — `src/hud/PainelDeAdversarios.tsx`
+- [x] Dados animados e log de eventos textual — `src/hud/{Dados,LogDeEventos}.tsx`, narração vinda de `packages/rules/src/narrate.ts`
+- [x] Modais: descarte, escolha de alvo do roubo, Monopólio, Descoberta — `src/hud/Modal*.tsx`, mais comércio com o banco (ver abaixo)
+- [x] Modo hot-seat local (contra o motor no browser) para desenvolver sem servidor — `src/estado/partida.ts`
+- **Aceite:** ✅ **partida completa jogável em hot-seat no navegador** — `apps/web/test/aceite.test.tsx`: um robô joga do setup à vitória tocando só no que a interface desenhou, em duas sementes, e o teste falha se qualquer clique oferecido produzir um `role="alert"`.
+
+#### Como ficou
+
+**A interface nunca vê o `GameState`.** Ela consome `mesa`, que é o `ClientView`
+de `toClientView` — a mesma projeção que o servidor emite em `state:snapshot`
+desde a M4. Ler o estado cru, que está ali do lado no hot-seat, faria a Fase 4
+virar reescrita. Assim, dois ganhos de uma vez: a mão alheia fica escondida sem
+esforço (hot-seat só quer dizer alguma coisa se o próximo jogador não puder ler
+a mão do anterior na tela), e a HUD nasce escrita contra o formato que o socket
+vai entregar.
+
+O que **não** atravessa de graça está na tabela de dívida: `enumerateLegalActions`
+exige `GameState`. A chamada foi contida em `src/estado/partida.ts` e só ali, o
+que reduz a Fase 4 a uma função em vez de dezenas de arquivos.
+
+**Três dos quatro modais não sabem uma regra sequer.** Monopólio, Descoberta,
+comércio com o banco e a vítima do roubo saem prontos do enumerador. O descarte
+é a exceção, e é o próprio motor que explica em `legal.ts`: descartes possíveis
+são exponenciais na mão, então ele gera só duas heurísticas e deixa a UI montar
+o resto — o botão "automático" reaproveita a primeira heurística em vez de
+reimplementá-la.
+
+**O destino do Saqueador se escolhe no tabuleiro**, não numa lista de dezoito
+linhas: a decisão depende de olhar quem está em volta, e isso só o desenho conta.
+
+**Comércio com o banco foi antecipado da Fase 4.** Sem ele, uma mão desequilibrada
+nunca vira cidade e a mesa trava — o aceite pede "partida completa", e a CLI da
+Fase 1 já tinha a válvula. O que a Fase 4 pede é outra coisa (proposta, resposta
+e confirmação **entre jogadores**), que depende de vários clientes.
+
+**A narração saiu do `apps/cli` para o motor** (`packages/rules/src/narrate.ts`).
+O texto dos 23 eventos já existia em português desde a Fase 1, mas dentro de
+`apps/`, que `packages/` não pode importar. A saída fácil seria a segunda
+tradução no navegador — a mesma escolha que §6.1 rejeita para as regras, com o
+agravante de que texto diverge calado. `NarrationScope` pede só o tabuleiro e o
+nome e a cor de cada jogador, forma que `GameState` e `ClientView` satisfazem sem
+conversão; o ANSI da CLI entra por injeção. De quebra, um `switch` de 23 casos
+que não tinha um teste passou a ser verificado narrando o log inteiro de quatro
+partidas de verdade.
+
+#### Dívida assumida ao fechar a fase
+
+| Pendência                                                                             | Onde                                                       | Quando                                                                       |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `enumerateLegalActions` exige `GameState`, e o cliente da Fase 4 só terá `ClientView` | `apps/web/src/estado/partida.ts`                           | Fase 4: ou o servidor manda a lista, ou nasce um enumerador sobre a projeção |
+| Comércio entre jogadores (propor, responder, confirmar)                               | `enumerateLegalActions` com `includeTradeOffers` desligado | Fase 4, como o roadmap prevê                                                 |
+| Contraproposta existe no motor e nunca é enumerada                                    | `packages/rules/src/legal.ts`                              | com a tela de negociação da Fase 4                                           |
+| Tela de fim de partida é uma faixa, sem placar detalhado                              | `apps/web/src/hud/FimDePartida.tsx`                        | Fase 5, como o roadmap prevê                                                 |
+| Responsividade só até "não quebra em uma coluna"                                      | `apps/web/src/App.tsx`                                     | Fase 5 (tablet e celular em paisagem)                                        |
+| Sem navegação por teclado nos alvos do tabuleiro                                      | `src/board/Camada*.tsx`                                    | Fase 5, junto do resto da acessibilidade                                     |
 
 ### Fase 4 — Integração multiplayer (2 semanas)
 
