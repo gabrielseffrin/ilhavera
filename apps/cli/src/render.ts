@@ -9,13 +9,11 @@
 import {
   DEV_CARD_LABELS,
   RESOURCE_LABELS,
-  TERRAIN_LABELS,
   RESOURCES,
   portLabel,
   victoryPoints,
   type GameState,
   type PlayerId,
-  type Resource,
   type Terrain,
 } from '@ilhavera/rules';
 
@@ -178,36 +176,10 @@ export function renderBank(state: GameState): string {
   return RESOURCES.map((r) => `${RESOURCE_LABELS[r]} ${state.bank[r]}`).join('  ');
 }
 
-/** Descreve um vértice de forma legível: quais terrenos ele toca. */
-export function describeVertex(state: GameState, vertexId: string): string {
-  const vertex = state.board.vertices[vertexId];
-  if (vertex === undefined) return vertexId;
-
-  const partes = vertex.hexes.map((h) => {
-    const hex = state.board.hexes[h]!;
-    const numero = hex.number === null ? '' : `-${hex.number}`;
-    return `${TERRAIN_LABELS[hex.terrain]}${numero}`;
-  });
-  const porto = vertex.port === null ? '' : ` [${portLabel(vertex.port)}]`;
-  return `${partes.join('/')}${porto}`;
-}
-
-export function describeEdge(state: GameState, edgeId: string): string {
-  const edge = state.board.edges[edgeId];
-  if (edge === undefined) return edgeId;
-  return `entre ${describeVertex(state, edge.vertices[0])} e ${describeVertex(state, edge.vertices[1])}`;
-}
-
-export function describeHex(state: GameState, hexId: string): string {
-  const hex = state.board.hexes[hexId];
-  if (hex === undefined) return hexId;
-  const numero = hex.number === null ? 'sem ficha' : `ficha ${hex.number}`;
-  return `${TERRAIN_LABELS[hex.terrain]} (${numero})`;
-}
-
-export function describeResources(counts: Record<Resource, number>): string {
-  const partes = RESOURCES.filter((r) => counts[r] > 0).map(
-    (r) => `${counts[r]}× ${RESOURCE_LABELS[r]}`,
-  );
-  return partes.length === 0 ? 'nada' : partes.join(', ');
-}
+/*
+ * `describeVertex`, `describeEdge`, `describeHex` e `describeResources` moravam
+ * aqui e subiram para `@ilhavera/rules` quando a Fase 3 precisou do mesmo texto
+ * na tela. São puros e não têm ANSI — não havia razão para ficarem presos ao
+ * terminal. O que sobrou neste arquivo é o que é mesmo de terminal: código de
+ * cor e desenho em grade de caracteres.
+ */

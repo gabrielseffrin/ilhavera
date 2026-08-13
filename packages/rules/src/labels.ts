@@ -9,6 +9,7 @@
 import type { DevCard, PortType, Resource, Terrain } from './types.js';
 import type { ErrorCode } from './errors.js';
 import type { Phase } from './state.js';
+import type { ActionType } from './actions/types.js';
 
 export const RESOURCE_LABELS: Readonly<Record<Resource, string>> = {
   lumber: 'Madeira',
@@ -89,6 +90,33 @@ export const ERROR_LABELS: Readonly<Record<ErrorCode, string>> = {
   TRADE_EXPIRED: 'Esta proposta não está mais valendo.',
   TRADE_NOT_ACCEPTED: 'Este jogador não aceitou a proposta.',
   INVALID_ACTION: 'Jogada inválida.',
+};
+
+/**
+ * O que cada jogada oferece, do ponto de vista de quem vai clicar.
+ *
+ * `Record<ActionType, string>` pela mesma razão de `ERROR_LABELS`: ação nova no
+ * motor sem rótulo não compila. Vive aqui, e não em cada cliente, porque a CLI
+ * e a interface precisam chamar a mesma jogada pelo mesmo nome — senão duas
+ * pessoas descrevem o mesmo bug com palavras diferentes.
+ */
+export const ACTION_LABELS: Readonly<Record<ActionType, string>> = {
+  placeSettlement: 'Colocar assentamento',
+  placeRoad: 'Colocar estrada',
+  buildCity: 'Construir cidade',
+  rollDice: 'Rolar os dados',
+  endTurn: 'Encerrar o turno',
+  discard: 'Descartar cartas',
+  moveRobber: 'Mover o Saqueador',
+  buyDevCard: 'Comprar Carta de Progresso',
+  playKnight: `Jogar ${DEV_CARD_LABELS.knight}`,
+  playRoadBuilding: `Jogar ${DEV_CARD_LABELS.roadBuilding}`,
+  playYearOfPlenty: `Jogar ${DEV_CARD_LABELS.yearOfPlenty}`,
+  playMonopoly: `Jogar ${DEV_CARD_LABELS.monopoly}`,
+  tradeBank: 'Comerciar com o banco/porto',
+  tradeOffer: 'Propor troca a jogadores',
+  tradeRespond: 'Responder à proposta',
+  tradeConfirm: 'Consumar a troca',
 };
 
 export const ROBBER_LABEL = 'Saqueador';

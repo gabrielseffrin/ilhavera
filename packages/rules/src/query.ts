@@ -14,7 +14,7 @@ import {
   type ResourceCount,
   type VertexId,
 } from './types.js';
-import type { GameState, PlayerState } from './state.js';
+import type { ActiveTrade, GameState, Phase, PlayerState } from './state.js';
 
 export function findPlayer(state: GameState, id: PlayerId): PlayerState | undefined {
   return state.players.find((p) => p.id === id);
@@ -23,6 +23,44 @@ export function findPlayer(state: GameState, id: PlayerId): PlayerState | undefi
 /** O jogador da vez. Nunca é `undefined`: o índice é sempre válido por construção. */
 export function currentPlayer(state: GameState): PlayerState {
   return state.players[state.currentPlayerIndex] as PlayerState;
+}
+
+/** O bastante para saber de quem é a vez — satisfeito por `GameState` e por `ClientView`. */
+export type TurnScope = {
+  phase: Phase;
+  pendingDiscards: Record<PlayerId, number>;
+  activeTrade: ActiveTrade | null;
+  players: readonly { id: PlayerId }[];
+  currentPlayerIndex: number;
+};
+
+/**
+ * Quem precisa agir agora — e nem sempre é o jogador da vez.
+ *
+ * No descarte todos os devedores agem em paralelo (§3.3), e numa proposta de
+ * troca quem responde é o alvo. Assumir "sempre `currentPlayerIndex`" trava a
+ * interface na primeira rolagem de 7 e faz o servidor recusar a resposta de
+ * quem tem todo o direito de responder — foi o tropeço que o roteiro de aceite
+ * da Fase 2 precisou resolver, e a CLI e a web já resolviam cada uma por conta,
+ * com uma diferença silenciosa entre as duas.
+ *
+ * Devolve lista, e não um jogador: quem consome decide se age em paralelo (a
+ * rede) ou um por vez (hot-seat).
+ */
+export function activePlayers(state: TurnScope): PlayerId[] {
+  if (state.phase === 'discarding') {
+    const pendentes = Object.keys(state.pendingDiscards);
+    if (pendentes.length > 0) return pendentes;
+  }
+
+  const troca = state.activeTrade;
+  if (troca !== null && state.phase === 'main') {
+    const faltando = troca.targets.filter((alvo) => troca.responses[alvo] === undefined);
+    if (faltando.length > 0) return faltando;
+  }
+
+  const daVez = state.players[state.currentPlayerIndex];
+  return daVez === undefined ? [] : [daVez.id];
 }
 
 export function canAfford(have: ResourceCount, cost: ResourceCount): boolean {
@@ -119,7 +157,18 @@ export function playerPorts(state: GameState, playerId: PlayerId): PortType[] {
  * 3:1 com porto genérico, 4:1 sem porto (§3.3).
  */
 export function bankTradeRate(state: GameState, playerId: PlayerId, give: Resource): number {
-  const ports = playerPorts(state, playerId);
+  return rateFromPorts(playerPorts(state, playerId), give);
+}
+
+/**
+ * A mesma taxa, a partir só da lista de portos.
+ *
+ * Existe separada porque o cliente não tem `GameState`: a projeção entrega
+ * `ports` já calculado (`view.ts`), e sem esta função a interface reimplementaria
+ * "2, 3 ou 4" à mão — exatamente a duplicação de regra que o pacote existe para
+ * impedir.
+ */
+export function rateFromPorts(ports: readonly PortType[], give: Resource): number {
   if (ports.includes(give)) return 2;
   if (ports.includes('generic')) return 3;
   return 4;

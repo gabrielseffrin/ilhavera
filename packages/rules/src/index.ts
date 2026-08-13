@@ -10,6 +10,7 @@
 export * from './types.js';
 export * from './errors.js';
 export * from './labels.js';
+export * from './narrate.js';
 export * from './state.js';
 export * from './query.js';
 export * from './legal.js';
