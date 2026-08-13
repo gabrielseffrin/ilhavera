@@ -7,12 +7,34 @@
  * já existe desde a Fase 2.
  */
 
+import { useMemo } from 'react';
+import { createGame } from '@ilhavera/rules';
+
+import { Tabuleiro } from './board/Tabuleiro.js';
+
+const JOGADORES = [
+  { id: 'ana', name: 'Ana', color: 'red' as const },
+  { id: 'bruno', name: 'Bruno', color: 'blue' as const },
+  { id: 'carla', name: 'Carla', color: 'white' as const },
+];
+
 export function App(): React.JSX.Element {
+  // Uma semente fixa enquanto o hot-seat não tem tela de criação de partida:
+  // recarregar a página não deveria trocar o tabuleiro no meio do trabalho.
+  const estado = useMemo(
+    () => createGame({ id: 'hot-seat', seed: 'ilhavera', players: JOGADORES }),
+    [],
+  );
+
   return (
-    <main className="flex h-full items-center justify-center p-6">
-      <div className="rounded-xl bg-white/90 px-8 py-6 text-center shadow-lg">
-        <h1 className="text-2xl font-semibold text-slate-800">Ilhavera</h1>
-        <p className="mt-2 text-slate-600">O tabuleiro entra aqui.</p>
+    <main className="flex h-full flex-col gap-3 p-4">
+      <header className="flex items-baseline gap-3">
+        <h1 className="text-xl font-semibold text-white drop-shadow">Ilhavera</h1>
+        <span className="text-sm text-white/80">hot-seat local</span>
+      </header>
+
+      <div className="min-h-0 flex-1">
+        <Tabuleiro estado={estado} />
       </div>
     </main>
   );
