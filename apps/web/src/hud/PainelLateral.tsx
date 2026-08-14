@@ -21,9 +21,16 @@ import { PainelDeAdversarios } from './PainelDeAdversarios.js';
 export type PainelLateralProps = {
   mesa: ClientView;
   ativo: PlayerId | null;
+  /**
+   * O que entra no topo da coluna. Hoje é a proposta em curso, e ela vem por
+   * aqui em vez de ser montada dentro: a negociação precisa de `legais` e de
+   * despachar jogada, e arrastar as duas coisas para dentro do painel faria
+   * dele mais um lugar que conhece a lista de legais.
+   */
+  children?: React.ReactNode;
 };
 
-export function PainelLateral({ mesa, ativo }: PainelLateralProps): React.JSX.Element {
+export function PainelLateral({ mesa, ativo, children }: PainelLateralProps): React.JSX.Element {
   // Quantas rolagens já houve: é o gatilho da animação dos dados, e o único que
   // distingue duas rolagens de mesmo resultado uma da outra.
   const rolagens = useMemo(
@@ -33,6 +40,7 @@ export function PainelLateral({ mesa, ativo }: PainelLateralProps): React.JSX.El
 
   return (
     <aside className="flex min-h-0 w-full shrink-0 flex-col gap-3 lg:w-96">
+      {children}
       <Dados roll={mesa.lastRoll} chave={rolagens} />
       <PainelDaMao voce={mesa.you} turno={mesa.turnNumber} />
       <PainelDeAdversarios mesa={mesa} ativo={ativo} />

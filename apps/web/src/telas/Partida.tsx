@@ -25,6 +25,7 @@ import { Tabuleiro } from '../board/Tabuleiro.js';
 import { BarraDeAcoes } from '../hud/BarraDeAcoes.js';
 import { FimDePartida } from '../hud/FimDePartida.js';
 import { Modais } from '../hud/Modais.js';
+import { PainelDaProposta } from '../hud/PainelDaProposta.js';
 import { PainelLateral } from '../hud/PainelLateral.js';
 import { useInterface, usePartida, useSala } from '../estado/contexto.js';
 
@@ -41,7 +42,9 @@ export function Partida({ mesa }: { mesa: ClientView }): React.JSX.Element {
 
   const modalAberto = useInterface((s) => s.modalAberto);
   const hexDoSaqueador = useInterface((s) => s.hexDoSaqueador);
+  const contrapondo = useInterface((s) => s.contrapondo);
   const abrirModal = useInterface((s) => s.abrirModal);
+  const contrapor = useInterface((s) => s.contrapor);
   const escolherHex = useInterface((s) => s.escolherHex);
   const fechar = useInterface((s) => s.fechar);
 
@@ -156,7 +159,17 @@ export function Partida({ mesa }: { mesa: ClientView }): React.JSX.Element {
           )}
         </section>
 
-        <PainelLateral mesa={mesa} ativo={ativo} />
+        <PainelLateral mesa={mesa} ativo={ativo}>
+          <PainelDaProposta
+            mesa={mesa}
+            legais={legais}
+            aoEscolher={escolher}
+            aoContrapor={() => {
+              const resposta = legais.find((a) => a.type === 'tradeRespond');
+              if (resposta !== undefined) contrapor(resposta);
+            }}
+          />
+        </PainelLateral>
       </div>
 
       <Modais
@@ -164,6 +177,7 @@ export function Partida({ mesa }: { mesa: ClientView }): React.JSX.Element {
         legais={legais}
         modalAberto={modalAberto}
         hexDoSaqueador={hexDoSaqueador}
+        contrapondo={contrapondo}
         aoEscolher={escolher}
         aoFechar={fechar}
       />

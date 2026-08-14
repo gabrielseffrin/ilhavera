@@ -65,6 +65,7 @@ function montar(
       legais={legais}
       modalAberto={extras.modalAberto ?? null}
       hexDoSaqueador={extras.hexDoSaqueador ?? null}
+      contrapondo={null}
       aoEscolher={aoEscolher}
       aoFechar={vi.fn()}
     />,
@@ -302,6 +303,7 @@ describe('modais dirigidos pela lista de legais', () => {
         legais={enumerateLegalActions(jogo, 'ana')}
         modalAberto="playMonopoly"
         hexDoSaqueador={null}
+        contrapondo={null}
         aoEscolher={vi.fn()}
         aoFechar={fechar}
       />,

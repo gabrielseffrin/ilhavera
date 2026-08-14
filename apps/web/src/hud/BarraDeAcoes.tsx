@@ -35,6 +35,15 @@ const FORA_DA_BARRA: ActionType[] = [
   'moveRobber',
 ];
 
+/**
+ * A exceção à regra dos dois níveis: sempre abre, mesmo com uma opção só.
+ *
+ * `tradeOffer` chega na lista como **sonda** — o servidor manda uma proposta
+ * qualquer que o motor aceitaria, só para dizer que dá para propor. Disparar
+ * essa uma seria mandar para a mesa uma troca que o jogador não escolheu.
+ */
+const SEMPRE_ABREM: ActionType[] = ['tradeOffer'];
+
 export function BarraDeAcoes({
   legais,
   onEscolher,
@@ -47,7 +56,7 @@ export function BarraDeAcoes({
   return (
     <div className="flex flex-wrap gap-2" data-testid="barra-de-acoes">
       {grupos.map(({ type, actions }) => {
-        const unica = actions.length === 1 ? actions[0] : undefined;
+        const unica = actions.length === 1 && !SEMPRE_ABREM.includes(type) ? actions[0] : undefined;
 
         return (
           <button
@@ -62,7 +71,7 @@ export function BarraDeAcoes({
             className="rounded-lg bg-white/95 px-3 py-2 text-sm font-medium text-slate-800 shadow transition hover:bg-white"
           >
             {ACTION_LABELS[type]}
-            {unica === undefined && (
+            {unica === undefined && !SEMPRE_ABREM.includes(type) && (
               <span className="ml-1 text-xs text-slate-500">({actions.length})</span>
             )}
           </button>

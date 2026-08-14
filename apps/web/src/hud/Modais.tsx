@@ -15,10 +15,12 @@ import {
   RESOURCE_LABELS,
   rateFromPorts,
   type Action,
+  type ActionOf,
   type ClientView,
 } from '@ilhavera/rules';
 
 import { ModalDeEscolha } from './ModalDeEscolha.js';
+import { ModalDeProposta } from './ModalDeProposta.js';
 import { ModalDescarte } from './ModalDescarte.js';
 
 export type ModaisProps = {
@@ -28,6 +30,8 @@ export type ModaisProps = {
   modalAberto: Action['type'] | null;
   /** Hexágono já escolhido para o Saqueador, esperando a vítima. */
   hexDoSaqueador: string | null;
+  /** Contraproposta em curso: os termos recebidos, para o compositor abrir com eles. */
+  contrapondo: ActionOf<'tradeRespond'> | null;
   aoEscolher: (acao: Action) => void;
   aoFechar: () => void;
 };
@@ -37,6 +41,7 @@ export function Modais({
   legais,
   modalAberto,
   hexDoSaqueador,
+  contrapondo,
   aoEscolher,
   aoFechar,
 }: ModaisProps): React.JSX.Element | null {
@@ -80,11 +85,53 @@ export function Modais({
     }
   }
 
-  // 3. O que o jogador pediu para escolher.
+  /**
+   * 3. Contraproposta: o compositor com os papéis trocados. Quem recebeu uma
+   * proposta oferece o que lhe pediram e pede o que lhe ofereceram — abrir com
+   * os termos invertidos poupa o gesto mais comum, que é ajustar a partir dali.
+   */
+  if (contrapondo !== null && voce !== null && mesa.activeTrade !== null) {
+    const recebida = mesa.activeTrade.terms;
+    return (
+      <ModalDeProposta
+        voce={voce}
+        alvos={[]}
+        titulo="Contrapropor"
+        rotuloDoBotao="Enviar contraproposta"
+        inicial={{ give: recebida.receive, receive: recebida.give }}
+        aoConfirmar={(terms) => {
+          aoEscolher({ ...contrapondo, response: { type: 'counter', terms } });
+        }}
+        aoFechar={aoFechar}
+      />
+    );
+  }
+
+  // 4. O que o jogador pediu para escolher.
   if (modalAberto === null) return null;
 
   const opcoes = legais.filter((a) => a.type === modalAberto);
   if (opcoes.length === 0) return null;
+
+  /**
+   * Propor troca é composição, não escolha: o que está na lista é a sonda que
+   * diz que dá para propor, e os termos saem daqui. Mesma exceção que o
+   * descarte, pelo mesmo motivo — o motor não enumera o que é infinito.
+   */
+  if (modalAberto === 'tradeOffer' && voce !== null) {
+    return (
+      <ModalDeProposta
+        voce={voce}
+        alvos={mesa.players
+          .filter((p) => p.id !== voce.id)
+          .map((p) => ({ id: p.id, name: p.name, color: p.color }))}
+        aoConfirmar={(terms, targets) => {
+          aoEscolher({ type: 'tradeOffer', player: voce.id, terms, targets });
+        }}
+        aoFechar={aoFechar}
+      />
+    );
+  }
 
   return (
     <ModalDeEscolha

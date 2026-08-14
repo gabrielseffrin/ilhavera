@@ -17,16 +17,23 @@
 
 import { createStore, useStore, type StoreApi } from 'zustand';
 
-import type { ActionType, HexId } from '@ilhavera/rules';
+import type { ActionOf, ActionType, HexId } from '@ilhavera/rules';
 
 export type EstadoDaInterface = {
   /** Que grupo de jogadas está sendo escolhido, quando há mais de uma opção. */
   modalAberto: ActionType | null;
   /** Hexágono já escolhido para o Saqueador, aguardando a vítima. */
   hexDoSaqueador: HexId | null;
+  /**
+   * A resposta que vai virar contraproposta. Guardada inteira, e não só um
+   * sinal, porque é ela que carrega o `tradeId` — o compositor precisa devolver
+   * a resposta à proposta certa, e não à que estiver aberta quando ele fechar.
+   */
+  contrapondo: ActionOf<'tradeRespond'> | null;
 
   abrirModal: (tipo: ActionType) => void;
   escolherHex: (hexId: HexId) => void;
+  contrapor: (resposta: ActionOf<'tradeRespond'>) => void;
   fechar: () => void;
 };
 
@@ -36,6 +43,7 @@ export function criarStoreDaInterface(): StoreDaInterface {
   return createStore<EstadoDaInterface>((set) => ({
     modalAberto: null,
     hexDoSaqueador: null,
+    contrapondo: null,
 
     abrirModal: (tipo) => {
       set({ modalAberto: tipo });
@@ -45,8 +53,12 @@ export function criarStoreDaInterface(): StoreDaInterface {
       set({ hexDoSaqueador: hexId });
     },
 
+    contrapor: (resposta) => {
+      set({ contrapondo: resposta });
+    },
+
     fechar: () => {
-      set({ modalAberto: null, hexDoSaqueador: null });
+      set({ modalAberto: null, hexDoSaqueador: null, contrapondo: null });
     },
   }));
 }
