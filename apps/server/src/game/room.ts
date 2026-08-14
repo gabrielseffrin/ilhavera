@@ -20,17 +20,20 @@
 
 import {
   createGame,
+  enumerateLegalActions,
   projectEvents,
   reduce,
   toClientView,
+  toClientViewDynamic,
   type Action,
   type ClientView,
+  type ClientViewDynamic,
   type CreateGameOptions,
   type GameEvent,
   type GameState,
   type PlayerId,
 } from '@ilhavera/rules';
-import type { Ack } from '@ilhavera/protocol';
+import type { AckErrorCode, SnapshotPayload } from '@ilhavera/protocol';
 
 import {
   gravarEmSegundoPlano,
@@ -54,7 +57,14 @@ export type SubmitInput = {
   action: Action;
 };
 
-export type SubmitAck = Ack<{ version: number }>;
+/**
+ * O `Ack` do contrato declara `error: string` de propósito, para que o cliente
+ * tolere um código que a versão dele não conhece. Aqui dentro, onde o código é
+ * produzido, ele é estreito: sem isso o `game:error` seria emitido com uma
+ * `string` qualquer e o compilador não teria como reclamar.
+ */
+export type SubmitAck =
+  { ok: true; data: { version: number } } | { ok: false; error: AckErrorCode };
 
 export type SubmitResult = {
   ack: SubmitAck;
@@ -139,6 +149,47 @@ export class GameRoom {
 
   view(viewerId: PlayerId | null): ClientView {
     return toClientView(this.#state, viewerId);
+  }
+
+  /** A metade da projeção que muda — o corpo do `state:patch`. */
+  dynamicFor(viewerId: PlayerId | null): ClientViewDynamic {
+    return toClientViewDynamic(this.#state, viewerId);
+  }
+
+  /**
+   * As jogadas legais de um jogador. Sai daqui e não do navegador porque
+   * enumerar exige o `GameState` cru: `isLegal` de `tradeConfirm` confere a mão
+   * do **parceiro**, que é exatamente o que a projeção esconde. Um enumerador
+   * sobre a projeção não seria uma segunda implementação das regras — seria uma
+   * implementação errada, respondendo com menos do que a pergunta exige.
+   */
+  legalFor(viewerId: PlayerId): Action[] {
+    const legais = enumerateLegalActions(this.#state, viewerId);
+    const sonda = this.#sondaDeProposta(viewerId);
+    return sonda === undefined ? legais : [...legais, sonda];
+  }
+
+  /**
+   * Uma proposta de comércio, só para dizer que o caminho está aberto.
+   *
+   * O botão "propor troca" precisa existir **antes** de a proposta existir, e a
+   * interface só desenha o que está na lista. Mandar a amostra inteira que
+   * `includeTradeOffers` gera resolveria e custaria caro em dois sentidos: são
+   * ~1,5 KB por patch por jogador de propostas que ninguém vai clicar, e um menu
+   * de vinte trocas 1:1 é uma interface pior do que a de compor os termos.
+   *
+   * Então vai uma, a primeira que o motor aceitou. Quem decide se dá para propor
+   * continua sendo `isLegal`, e não uma condição de fase reescrita no navegador.
+   */
+  #sondaDeProposta(viewerId: PlayerId): Action | undefined {
+    return enumerateLegalActions(this.#state, viewerId, { includeTradeOffers: true }).find(
+      (a) => a.type === 'tradeOffer',
+    );
+  }
+
+  /** Estado completo mais as jogadas legais — o corpo do `state:snapshot`. */
+  snapshotFor(viewerId: PlayerId): SnapshotPayload {
+    return { view: this.view(viewerId), legal: this.legalFor(viewerId) };
   }
 
   /** Eventos de uma jogada, filtrados para um espectador — o corpo do `state:patch`. */

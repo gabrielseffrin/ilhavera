@@ -16,7 +16,7 @@
 
 import { randomBytes, randomUUID } from 'node:crypto';
 
-import type { RoomErrorCode, RoomSettings } from '@ilhavera/protocol';
+import type { RoomErrorCode, RoomSettings, RoomStatus, RoomView } from '@ilhavera/protocol';
 import { MAX_PLAYERS, MIN_PLAYERS, PLAYER_COLORS, type PlayerColor } from '@ilhavera/rules';
 
 import { GameRoom } from '../game/room.js';
@@ -32,7 +32,9 @@ import {
 } from '../persistence/store.js';
 import { generateUniqueRoomCode } from './code.js';
 
-export type RoomStatus = 'lobby' | 'playing' | 'finished';
+// `RoomStatus` e `RoomView` são payload de `room:updated` e moram no contrato.
+// Reexportados porque o servidor inteiro os importa daqui desde a Fase 2.
+export type { RoomStatus, RoomView } from '@ilhavera/protocol';
 
 export type Seat = {
   playerId: PlayerId;
@@ -55,16 +57,6 @@ export type Room = {
 };
 
 export type RoomResult<T> = { ok: true; value: T } | { ok: false; error: RoomErrorCode };
-
-/** O que vai no broadcast `room:updated`. Nunca inclui o `GameState`. */
-export type RoomView = {
-  code: string;
-  hostId: PlayerId;
-  status: RoomStatus;
-  settings: RoomSettings;
-  players: { id: PlayerId; nickname: string; color: PlayerColor; connected: boolean }[];
-  canStart: boolean;
-};
 
 export function toRoomView(room: Room): RoomView {
   return {

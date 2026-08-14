@@ -12,7 +12,13 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 
-import { projectEvents, toClientView } from '../src/view.js';
+import {
+  applyClientViewPatch,
+  projectEvents,
+  toClientView,
+  toClientViewDynamic,
+  toClientViewStatic,
+} from '../src/view.js';
 import { reduce } from '../src/reduce.js';
 import { victoryPoints } from '../src/scoring/victory.js';
 import { playRandomGame } from './helpers/driver.js';
@@ -27,6 +33,8 @@ import {
 } from './helpers/setup.js';
 import { clearBuildingsOnHex, hexVertices, placeBuilding } from './helpers/board.js';
 import type { GameEvent, GameState } from '../src/state.js';
+import type { PlayerId } from '../src/types.js';
+import type { ClientView } from '../src/view.js';
 
 /** Percorre o JSON e devolve todos os valores primitivos encontrados. */
 function todosOsValores(value: unknown, out: unknown[] = []): unknown[] {
@@ -268,5 +276,66 @@ describe('toClientView: varredura recursiva por sentinelas', () => {
       }),
       { numRuns: 15 },
     );
+  });
+});
+
+/**
+ * O corte estático/dinâmico existe para o `state:patch` da Fase 4: o cliente não
+ * tem motor e não deriva estado de evento nenhum — ele recebe a metade que muda
+ * e remonta. Se a remontagem não der exatamente o mesmo objeto que um
+ * `state:snapshot` daria, o cliente passa a divergir do servidor calado, que é o
+ * pior modo de falha possível num jogo autoritativo.
+ */
+describe('projeção partida em estático e dinâmico', () => {
+  it('remonta, a cada jogada, a mesma projeção que o snapshot daria', () => {
+    const seeds = ['patch-1', 'patch-2', 'patch-3'];
+
+    for (const seed of seeds) {
+      let anteriores = new Map<PlayerId, ClientView>();
+      let comparacoes = 0;
+
+      playRandomGame(seed, {
+        includeTradeOffers: true,
+        onStep: ({ state, events }) => {
+          const atuais = new Map<PlayerId, ClientView>();
+
+          for (const jogador of state.players) {
+            const snapshot = toClientView(state, jogador.id);
+            atuais.set(jogador.id, snapshot);
+
+            const anterior = anteriores.get(jogador.id);
+            if (anterior === undefined) continue;
+
+            const remontado = applyClientViewPatch(
+              anterior,
+              toClientViewDynamic(state, jogador.id),
+              projectEvents(events, jogador.id),
+            );
+
+            expect(remontado).toEqual(snapshot);
+            comparacoes++;
+          }
+
+          anteriores = atuais;
+        },
+      });
+
+      expect(comparacoes).toBeGreaterThan(100);
+    }
+  });
+
+  it('a metade estática não muda do começo ao fim da partida', () => {
+    const inicios: string[] = [];
+    let primeiro: string | null = null;
+
+    playRandomGame('estatico-1', {
+      onStep: ({ state }) => {
+        const atual = JSON.stringify(toClientViewStatic(state));
+        primeiro ??= atual;
+        if (atual !== primeiro) inicios.push(atual);
+      },
+    });
+
+    expect(inicios).toEqual([]);
   });
 });

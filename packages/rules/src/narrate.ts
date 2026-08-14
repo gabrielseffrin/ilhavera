@@ -23,14 +23,7 @@
 import type { BoardGraph } from './board/graph.js';
 import type { GameEvent } from './state.js';
 import type { Action, ActionType } from './actions/types.js';
-import type {
-  EdgeId,
-  HexId,
-  PlayerColor,
-  PlayerId,
-  ResourceCount,
-  VertexId,
-} from './types.js';
+import type { EdgeId, HexId, PlayerColor, PlayerId, ResourceCount, VertexId } from './types.js';
 import { RESOURCES } from './types.js';
 import {
   DEV_CARD_LABELS,

@@ -11,7 +11,7 @@
 
 import type { Server as IOServer, Socket } from 'socket.io';
 
-import type { Ack, CommandName, ServerEventName } from '@ilhavera/protocol';
+import type { Ack, CommandName, ServerEventName, ServerEventPayload } from '@ilhavera/protocol';
 
 import type { PlayerId } from '../identity/players.js';
 import type { RateLimiter } from './rate-limit.js';
@@ -22,7 +22,14 @@ export type ClientToServerEvents = Record<
   (payload: unknown, ack?: (resposta: Ack<unknown>) => void) => void
 >;
 
-export type ServerToClientEvents = Record<ServerEventName, (payload: unknown) => void>;
+/**
+ * Payload tipado por evento, e não `unknown`: é o que faz o compilador recusar
+ * um `state:patch` sem a lista de jogadas legais, em vez de deixar a falta
+ * aparecer como tabuleiro sem destaque no navegador de alguém.
+ */
+export type ServerToClientEvents = {
+  [E in ServerEventName]: (payload: ServerEventPayload<E>) => void;
+};
 
 /** Vazio até a Fase 2 do backlog, quando o adapter Redis liga os nós. */
 export type InterServerEvents = Record<string, never>;

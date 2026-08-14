@@ -108,3 +108,83 @@ export function toAction<K extends GameCommandName>(
 ): Action {
   return TO_ACTION[name](payload, player);
 }
+
+/**
+ * Um comando pronto para o fio: o nome e o payload que casa com ele.
+ *
+ * União discriminada, e não `{ nome, payload: Record<string, unknown> }`, porque
+ * é assim que `socket.emit(cmd.name, ...)` continua checado — com o payload
+ * frouxo, um campo errado só apareceria como `BAD_PAYLOAD` em tempo de execução,
+ * do outro lado da rede.
+ */
+export type NetworkCommand = {
+  [K in GameCommandName]: { name: K; payload: CommandPayload<K> };
+}[GameCommandName];
+
+/**
+ * O caminho inverso de `TO_ACTION`: da ação do motor para o comando de rede.
+ *
+ * O cliente enumera jogadas como `Action` — é o vocabulário que o tabuleiro, a
+ * barra e os modais falam desde a Fase 3, e é o que o servidor manda na lista de
+ * legais. Mandar uma delas pelo fio é traduzir aqui. Mora junto de `TO_ACTION`
+ * para que as duas direções sejam lidas lado a lado: quando o `switch` exaustivo
+ * quebra por uma ação nova, a tabela que falta preencher está logo acima.
+ *
+ * `player` não vai no payload de propósito: quem envia é o dono do socket, e
+ * aceitar o remetente pelo payload seria deixar qualquer um jogar pelos outros.
+ */
+export function toCommand(action: Action): NetworkCommand {
+  switch (action.type) {
+    case 'placeSettlement':
+      return { name: 'game:placeSettlement', payload: { vertexId: action.vertexId } };
+    case 'placeRoad':
+      return { name: 'game:placeRoad', payload: { edgeId: action.edgeId } };
+    case 'buildCity':
+      return { name: 'game:buildCity', payload: { vertexId: action.vertexId } };
+    case 'rollDice':
+      return { name: 'game:rollDice', payload: {} };
+    case 'endTurn':
+      return { name: 'game:endTurn', payload: {} };
+    case 'discard':
+      return { name: 'game:discard', payload: { resources: action.resources } };
+    case 'moveRobber':
+      return {
+        name: 'game:moveRobber',
+        payload: { hexId: action.hexId, stealFrom: action.stealFrom },
+      };
+    case 'buyDevCard':
+      return { name: 'game:buyDevCard', payload: {} };
+
+    // As quatro cartas voltam a ser um comando só, com o discriminante.
+    case 'playKnight':
+      return { name: 'game:playDevCard', payload: { card: 'knight' } };
+    case 'playRoadBuilding':
+      return { name: 'game:playDevCard', payload: { card: 'roadBuilding' } };
+    case 'playYearOfPlenty':
+      return {
+        name: 'game:playDevCard',
+        payload: { card: 'yearOfPlenty', resources: action.resources },
+      };
+    case 'playMonopoly':
+      return { name: 'game:playDevCard', payload: { card: 'monopoly', resource: action.resource } };
+
+    case 'tradeBank':
+      return { name: 'game:tradeBank', payload: { give: action.give, receive: action.receive } };
+    case 'tradeOffer':
+      return {
+        name: 'game:tradeOffer',
+        payload: { terms: action.terms, targets: action.targets },
+      };
+    case 'tradeRespond':
+      return {
+        name: 'game:tradeRespond',
+        payload: { tradeId: action.tradeId, response: action.response },
+      };
+    // O renome que `TO_ACTION` desfaz do outro lado.
+    case 'tradeConfirm':
+      return {
+        name: 'game:tradeConfirm',
+        payload: { tradeId: action.tradeId, withPlayerId: action.withPlayer },
+      };
+  }
+}

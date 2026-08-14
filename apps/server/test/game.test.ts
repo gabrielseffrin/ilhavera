@@ -8,12 +8,8 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  enumerateLegalActions,
-  type Action,
-  type ClientView,
-  type GameEvent,
-} from '@ilhavera/rules';
+import { enumerateLegalActions, type Action } from '@ilhavera/rules';
+import type { PatchPayload, SnapshotPayload } from '@ilhavera/protocol';
 
 import { startTestServer, type Client, type TestServer } from './helpers/server.js';
 import type { GameRoom } from '../src/game/room.js';
@@ -25,9 +21,6 @@ afterEach(async () => {
   await atual?.close();
   atual = null;
 });
-
-/** O corpo do `state:patch` da §5.2. */
-type Patch = { version: number; events: GameEvent[] };
 
 type Partida = {
   s: TestServer;
@@ -225,14 +218,14 @@ describe('state:snapshot', () => {
     if (host === undefined) throw new Error('lobby sem host');
 
     // Escuta antes de iniciar: o snapshot sai dentro do `room:start`.
-    const esperados = p.clientes.map((c) => c.next<ClientView>('state:snapshot'));
+    const esperados = p.clientes.map((c) => c.next<SnapshotPayload>('state:snapshot'));
     await host.send('room:start');
     const snapshots = await Promise.all(esperados);
 
     for (const [i, snapshot] of snapshots.entries()) {
-      expect(snapshot.you?.id).toBe(p.clientes[i]?.playerId);
-      expect(snapshot.phase).toBe('setup1');
-      expect(snapshot.version).toBe(0);
+      expect(snapshot.view.you?.id).toBe(p.clientes[i]?.playerId);
+      expect(snapshot.view.phase).toBe('setup1');
+      expect(snapshot.view.version).toBe(0);
     }
   });
 
@@ -241,15 +234,15 @@ describe('state:snapshot', () => {
     const host = p.clientes[0];
     if (host === undefined) throw new Error('lobby sem host');
 
-    const esperado = host.next<ClientView>('state:snapshot');
+    const esperado = host.next<SnapshotPayload>('state:snapshot');
     await host.send('room:start');
     const snapshot = await esperado;
 
-    const cru = JSON.parse(JSON.stringify(snapshot)) as Record<string, unknown>;
+    const cru = JSON.parse(JSON.stringify(snapshot.view)) as Record<string, unknown>;
     expect(cru['devDeck']).toBeUndefined();
     expect((cru as { devDeckSize: number }).devDeckSize).toBeGreaterThan(0);
 
-    for (const jogador of snapshot.players) {
+    for (const jogador of snapshot.view.players) {
       if (jogador.id === host.playerId) continue;
       expect(jogador).not.toHaveProperty('resources');
       expect(jogador).not.toHaveProperty('devCards');
@@ -269,10 +262,85 @@ describe('state:snapshot', () => {
     // O snapshot de reconexão sai dentro do `connection`, antes de o teste ter
     // onde escutar — por isso o helper guarda o último recebido.
     const devolta = await p.s.connect(token ?? undefined);
-    const snapshot = devolta.lastSnapshot as ClientView | null;
+    const snapshot = devolta.lastSnapshot as SnapshotPayload | null;
 
-    expect(snapshot?.version).toBe(1);
-    expect(snapshot?.you?.id).toBe(cliente.playerId);
+    expect(snapshot?.view.version).toBe(1);
+    expect(snapshot?.view.you?.id).toBe(cliente.playerId);
+  });
+});
+
+/**
+ * A lista de jogadas legais é a entrega da Fase 4: o navegador não enumera nada,
+ * porque enumerar precisa do estado cru. Sendo a lista que decide o que a tela
+ * oferece, ela é também uma fronteira de informação — uma jogada alheia nela
+ * contaria de quem é a vez de fazer o quê, e uma jogada a mais travaria o
+ * jogador num clique que o motor vai recusar.
+ */
+describe('a lista de jogadas legais', () => {
+  it('só contém jogadas do próprio jogador', async () => {
+    const p = await lobby(3);
+    const host = p.clientes[0];
+    if (host === undefined) throw new Error('lobby sem host');
+
+    const esperados = p.clientes.map((c) => c.next<SnapshotPayload>('state:snapshot'));
+    await host.send('room:start');
+    const snapshots = await Promise.all(esperados);
+
+    for (const [i, snapshot] of snapshots.entries()) {
+      for (const acao of snapshot.legal) {
+        expect(acao.player).toBe(p.clientes[i]?.playerId);
+      }
+    }
+  });
+
+  it('chega vazia para quem não pode agir, e cheia para quem pode', async () => {
+    const p = await lobby(3);
+    const host = p.clientes[0];
+    if (host === undefined) throw new Error('lobby sem host');
+
+    const esperados = p.clientes.map((c) => c.next<SnapshotPayload>('state:snapshot'));
+    await host.send('room:start');
+    const snapshots = await Promise.all(esperados);
+
+    const daVezNoSetup = snapshots.filter((s) => s.legal.length > 0);
+    expect(daVezNoSetup).toHaveLength(1);
+    // No `setup1` só se coloca assentamento, e todo vértice livre é candidato.
+    expect(daVezNoSetup[0]?.legal.every((a) => a.type === 'placeSettlement')).toBe(true);
+  });
+
+  it('anda junto com a versão no patch, para todo mundo', async () => {
+    const p = await partida(3);
+    const { acao, cliente } = daVez(p);
+    const { nome, payload } = comandoDe(acao);
+
+    const esperados = p.clientes.map((c) => c.next<PatchPayload>('state:patch'));
+    await cliente.send(nome, payload);
+    const patches = await Promise.all(esperados);
+
+    for (const [i, patch] of patches.entries()) {
+      expect(patch.version).toBe(1);
+      expect(patch.view.version).toBe(1);
+      for (const legal of patch.legal) {
+        expect(legal.player).toBe(p.clientes[i]?.playerId);
+      }
+    }
+
+    // Depois de colocar o assentamento, a vez continua sendo do mesmo jogador:
+    // no setup ele coloca a estrada em seguida.
+    const meu = patches[p.clientes.indexOf(cliente)];
+    expect(meu?.legal.every((a) => a.type === 'placeRoad')).toBe(true);
+  });
+
+  it('a sonda de proposta é uma só, e só para quem pode propor', async () => {
+    const p = await partida(3);
+    const game = p.game();
+
+    for (const seat of game.state.players) {
+      const propostas = game.legalFor(seat.id).filter((a) => a.type === 'tradeOffer');
+      // No setup ninguém propõe; o que importa aqui é que nunca vem uma amostra
+      // inteira de propostas, que é o que encheria o patch de lixo.
+      expect(propostas.length).toBeLessThanOrEqual(1);
+    }
   });
 });
 
@@ -282,7 +350,7 @@ describe('state:patch', () => {
     const { acao, cliente } = daVez(p);
     const { nome, payload } = comandoDe(acao);
 
-    const esperados = p.clientes.map((c) => c.next<Patch>('state:patch'));
+    const esperados = p.clientes.map((c) => c.next<PatchPayload>('state:patch'));
     await cliente.send(nome, payload);
     const patches = await Promise.all(esperados);
 
@@ -319,14 +387,14 @@ describe('state:resync', () => {
     const { nome, payload } = comandoDe(acao);
     await cliente.send(nome, payload);
 
-    const chegando = cliente.next<ClientView>('state:snapshot');
-    const ack = await cliente.send<ClientView>('state:resync');
+    const chegando = cliente.next<SnapshotPayload>('state:snapshot');
+    const ack = await cliente.send<SnapshotPayload>('state:resync');
     const evento = await chegando;
 
     expect(ack.ok).toBe(true);
     if (!ack.ok) return;
-    expect(ack.data.version).toBe(1);
-    expect(ack.data.you?.id).toBe(cliente.playerId);
+    expect(ack.data.view.version).toBe(1);
+    expect(ack.data.view.you?.id).toBe(cliente.playerId);
     expect(evento).toEqual(ack.data);
   });
 
@@ -355,16 +423,16 @@ describe('state:resync', () => {
     const [ana] = p.clientes;
     if (ana === undefined) throw new Error('sem Ana');
 
-    const ack = await ana.send<ClientView>('state:resync');
+    const ack = await ana.send<SnapshotPayload>('state:resync');
     expect(ack.ok).toBe(true);
     if (!ack.ok) return;
 
-    for (const jogador of ack.data.players) {
+    for (const jogador of ack.data.view.players) {
       if (jogador.id === ana.playerId) continue;
       expect(jogador).not.toHaveProperty('resources');
       expect(jogador).not.toHaveProperty('devCards');
     }
-    expect(ack.data as unknown as Record<string, unknown>).not.toHaveProperty('devDeck');
+    expect(ack.data.view as unknown as Record<string, unknown>).not.toHaveProperty('devDeck');
   });
 
   it('recusa quem não está em sala ou cuja partida não começou', async () => {
@@ -394,12 +462,12 @@ describe('state:resync', () => {
     const [ana] = p.clientes;
     if (ana === undefined) throw new Error('sem Ana');
 
-    const ack = await ana.send<ClientView>('state:resync');
+    const ack = await ana.send<SnapshotPayload>('state:resync');
 
     expect(ack.ok).toBe(true);
     if (!ack.ok) return;
-    expect(ack.data.version).toBe(4);
-    expect(ack.data.version).toBe(p.game().version);
+    expect(ack.data.view.version).toBe(4);
+    expect(ack.data.view.version).toBe(p.game().version);
   });
 });
 

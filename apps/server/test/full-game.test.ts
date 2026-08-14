@@ -2,10 +2,14 @@
  * O aceite da Fase 2: clientes de teste jogam uma **partida completa** por
  * WebSocket, do `room:start` até haver um vencedor.
  *
- * Nada aqui toca no motor diretamente para mudar estado: toda jogada sai de um
- * socket e volta como ack. O estado do servidor é lido só para escolher a
- * próxima jogada legal — que é exatamente o que o cliente da Fase 3 vai fazer
- * com o `state:snapshot` que recebe.
+ * Nada aqui toca no motor: toda jogada sai de um socket e volta como ack, e a
+ * escolha da próxima sai da lista de legais que o **servidor** mandou no
+ * `state:snapshot`/`state:patch` — exatamente como o cliente da Fase 4 joga. O
+ * estado do servidor só é lido para saber quando a partida acabou.
+ *
+ * Isso faz do aceite da Fase 2 também o teste mais forte da lista de legais: se
+ * ela vier errada, a partida trava ou uma jogada é recusada, e as duas coisas
+ * quebram aqui.
  *
  * As jogadas são sorteadas com peso, e não uniformemente. Com peso uniforme a
  * partida encerraria turno o tempo todo e quase nunca chegaria a 10 PV — o
@@ -14,14 +18,9 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  enumerateLegalActions,
-  type Action,
-  type ActionType,
-  type GameState,
-} from '@ilhavera/rules';
+import type { Action, ActionType, GameState } from '@ilhavera/rules';
 
-import { comandoDaAcao } from './helpers/commands.js';
+import { toCommand } from '@ilhavera/protocol';
 import { startTestServer, type Client, type TestServer } from './helpers/server.js';
 import type { GameRoom } from '../src/game/room.js';
 import type { RoomView } from '../src/rooms/registry.js';
@@ -96,26 +95,19 @@ function escolherComPeso(acoes: Action[], proximo: () => number): Action {
 }
 
 /**
- * De quem é a vez de agir — que nem sempre é o jogador da vez.
+ * Espera todos os clientes alcançarem a versão do servidor.
  *
- * No descarte, todos os pendentes agem em paralelo; numa proposta aberta, quem
- * responde é o alvo. Assumir "sempre o jogador da vez" travaria o roteiro na
- * primeira rolagem de 7.
+ * O ack volta para quem jogou antes de o `state:patch` chegar aos outros, e ler
+ * a lista de legais nesse intervalo daria a lista da jogada anterior. Não é
+ * frescura de teste: é a mesma corrida que um cliente de verdade tem, e a
+ * resposta dele também é esperar o patch em vez de adivinhar.
  */
-function quemAge(state: GameState): string[] {
-  if (state.phase === 'discarding') {
-    const pendentes = Object.keys(state.pendingDiscards);
-    if (pendentes.length > 0) return pendentes;
+async function aguardarSincronia(clientes: Client[], versao: number): Promise<void> {
+  const limite = Date.now() + 3000;
+  while (clientes.some((c) => c.versao < versao)) {
+    if (Date.now() > limite) throw new Error(`clientes não alcançaram a versão ${versao}`);
+    await new Promise((r) => setTimeout(r, 2));
   }
-
-  const trade = state.activeTrade;
-  if (trade !== null) {
-    const faltando = trade.targets.filter((t) => trade.responses[t] === undefined);
-    if (faltando.length > 0) return faltando;
-  }
-
-  const daVez = state.players[state.currentPlayerIndex];
-  return daVez === undefined ? [] : [daVez.id];
 }
 
 const MAX_PASSOS = 3000;
@@ -152,36 +144,40 @@ async function jogarPartidaCompleta(semente: string, sementeDoRoteiro: number): 
   const tipos = new Set<ActionType>();
   let passos = 0;
 
-  while (jogo().state.phase !== 'finished' && passos < MAX_PASSOS) {
-    const estado = jogo().state;
+  const clientes = [...porId.values()];
+  await aguardarSincronia(clientes, 0);
 
-    // `includeTradeOffers` liga o comércio entre jogadores, que é o fluxo mais
-    // longo do protocolo: propor, responder de várias bocas e confirmar com uma.
-    const comAcoes = quemAge(estado)
-      .map((id) => ({ id, acoes: enumerateLegalActions(estado, id, { includeTradeOffers: true }) }))
-      .filter((c) => c.acoes.length > 0);
+  while (jogo().state.phase !== 'finished' && passos < MAX_PASSOS) {
+    /**
+     * Quem pode agir são os clientes cuja lista do servidor não está vazia — e
+     * mais ninguém. Não há `quemAge` aqui: a própria lista responde a pergunta,
+     * inclusive no descarte paralelo, em que vários agem ao mesmo tempo. Se o
+     * servidor errasse a lista, a mesa travaria neste laço.
+     */
+    const comAcoes = clientes.filter((c) => c.legais.length > 0);
 
     if (comAcoes.length === 0) {
-      throw new Error(`partida travada na fase ${estado.phase} após ${passos} jogadas`);
+      throw new Error(
+        `partida travada na fase ${jogo().state.phase} após ${passos} jogadas: ` +
+          'nenhum cliente recebeu jogada legal',
+      );
     }
 
-    const quem = comAcoes[Math.floor(proximo() * comAcoes.length) % comAcoes.length] as {
-      id: string;
-      acoes: Action[];
-    };
-    const acao = escolherComPeso(quem.acoes, proximo);
-    const { nome, payload } = comandoDaAcao(acao);
+    const cliente = comAcoes[Math.floor(proximo() * comAcoes.length) % comAcoes.length] as Client;
+    const acao = escolherComPeso(cliente.legais, proximo);
+    const { name, payload } = toCommand(acao);
 
-    const cliente = porId.get(quem.id);
-    if (cliente === undefined) throw new Error(`sem cliente para ${quem.id}`);
-
-    const ack = await cliente.send(nome, payload);
+    const ack = await cliente.send(name, payload);
     if (!ack.ok) {
-      throw new Error(`jogada ${passos + 1} (${acao.type} de ${quem.id}) recusada: ${ack.error}`);
+      throw new Error(
+        `jogada ${passos + 1} (${acao.type} de ${cliente.playerId ?? '?'}) recusada: ${ack.error}`,
+      );
     }
 
     tipos.add(acao.type);
     passos += 1;
+
+    await aguardarSincronia(clientes, passos);
   }
 
   const resultado = { passos, final: jogo().state, tipos };

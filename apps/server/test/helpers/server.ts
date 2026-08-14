@@ -8,7 +8,8 @@
 
 import { io as connect, type Socket } from 'socket.io-client';
 
-import type { Ack, CommandName } from '@ilhavera/protocol';
+import type { Ack, CommandName, PatchPayload, SnapshotPayload } from '@ilhavera/protocol';
+import type { Action } from '@ilhavera/rules';
 
 import { buildServer, type AppServer, type BuildOptions } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
@@ -25,6 +26,15 @@ export type Client = {
    * `next()` que o teste consiga registrar depois do `connect`.
    */
   lastSnapshot: unknown;
+  /**
+   * As jogadas legais que o **servidor** mandou, e a versão a que pertencem.
+   *
+   * É o que um cliente de verdade tem para decidir o que oferecer na tela: ele
+   * não enumera nada, porque enumerar precisa do estado cru. O teste joga daqui
+   * justamente para que a lista emitida seja exercitada, e não só emitida.
+   */
+  legais: Action[];
+  versao: number;
   /** `requestId` explícito só quando o teste quer simular reenvio. */
   send<T = unknown>(
     command: CommandName,
@@ -88,6 +98,8 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
         token: null,
         playerId: null,
         lastSnapshot: null,
+        legais: [],
+        versao: -1,
 
         async send<T = unknown>(
           command: CommandName,
@@ -146,8 +158,15 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
         cliente.playerId = dados.playerId;
       });
 
-      socket.on('state:snapshot', (dados: unknown) => {
+      socket.on('state:snapshot', (dados: SnapshotPayload) => {
         cliente.lastSnapshot = dados;
+        cliente.legais = dados.legal;
+        cliente.versao = dados.view.version;
+      });
+
+      socket.on('state:patch', (dados: PatchPayload) => {
+        cliente.legais = dados.legal;
+        cliente.versao = dados.version;
       });
 
       await new Promise<void>((resolve, reject) => {

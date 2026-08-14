@@ -40,7 +40,7 @@ export function emitSnapshot(io: GameServer, room: Room): void {
   if (game === null) return;
 
   for (const seat of room.seats) {
-    io.to(seat.playerId).emit('state:snapshot', game.view(seat.playerId));
+    io.to(seat.playerId).emit('state:snapshot', game.snapshotFor(seat.playerId));
   }
 }
 
@@ -49,13 +49,21 @@ export function emitSnapshotTo(socket: GameSocket, room: Room): void {
   const game = room.game;
   if (game === null) return;
 
-  socket.emit('state:snapshot', game.view(socket.data.playerId));
+  socket.emit('state:snapshot', game.snapshotFor(socket.data.playerId));
 }
 
 /**
  * O delta de uma jogada (§5.2). `version` vai junto porque é ela que deixa o
  * cliente perceber que perdeu um patch e pedir `state:resync` — a "regra de
  * consistência" de §5.2.
+ *
+ * Carrega estado, e não só eventos, porque **o cliente não tem motor**. Até a
+ * Fase 3 o patch levava só a narrativa, e ninguém consumia: quem desenhava a
+ * tela era o hot-seat, com o `reduce` rodando no próprio navegador. Ligado o
+ * socket, derivar o estado novo a partir dos eventos exigiria reimplementar as
+ * regras do lado de lá — a reimplementação que §6.1 existe para evitar.
+ *
+ * O que vai é só a metade que muda: o tabuleiro foi no snapshot e não se repete.
  */
 export function emitPatch(io: GameServer, room: Room, events: readonly GameEvent[]): void {
   const game = room.game;
@@ -66,6 +74,8 @@ export function emitPatch(io: GameServer, room: Room, events: readonly GameEvent
     io.to(seat.playerId).emit('state:patch', {
       version,
       events: game.patchFor(events, seat.playerId),
+      view: game.dynamicFor(seat.playerId),
+      legal: game.legalFor(seat.playerId),
     });
   }
 }
@@ -88,9 +98,9 @@ export function registerGameCommands(socket: GameSocket, deps: GameDeps): void {
       if (room === undefined) return { ok: false, error: 'NOT_IN_ROOM' };
       if (room.game === null) return { ok: false, error: 'ROOM_NOT_STARTED' };
 
-      const view = room.game.view(playerId);
-      socket.emit('state:snapshot', view);
-      return { ok: true, data: view };
+      const snapshot = room.game.snapshotFor(playerId);
+      socket.emit('state:snapshot', snapshot);
+      return { ok: true, data: snapshot };
     },
     deps.log,
   );

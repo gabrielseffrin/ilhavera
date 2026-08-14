@@ -9,7 +9,8 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { enumerateLegalActions, type Action, type ClientView } from '@ilhavera/rules';
+import { enumerateLegalActions, type Action } from '@ilhavera/rules';
+import type { SnapshotPayload } from '@ilhavera/protocol';
 
 import { MemoryStore } from '../src/persistence/memory.js';
 import { PostgresStore } from '../src/persistence/postgres.js';
@@ -239,9 +240,9 @@ describe('aceite: o servidor cai no meio da partida', () => {
     // A identidade sobreviveu: não recebeu token novo.
     expect(devolta.token).toBeNull();
 
-    const snapshot = devolta.lastSnapshot as ClientView | null;
-    expect(snapshot?.version).toBe(3);
-    expect(snapshot?.you?.id).toBe(ana.playerId);
+    const snapshot = devolta.lastSnapshot as SnapshotPayload | null;
+    expect(snapshot?.view.version).toBe(3);
+    expect(snapshot?.view.you?.id).toBe(ana.playerId);
     expect(novo.server.rooms.byCode(code)?.seats).toHaveLength(3);
   });
 
