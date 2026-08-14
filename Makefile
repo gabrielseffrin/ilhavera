@@ -1,4 +1,4 @@
-.PHONY: up down sh install lint typecheck test test-watch coverage heavy play demo dev web build clean logs
+.PHONY: up down sh install lint typecheck test test-watch coverage heavy play demo dev web web-hotseat build clean logs
 
 COMPOSE := docker compose
 EXEC := $(COMPOSE) exec app
@@ -49,9 +49,13 @@ demo:
 dev:
 	$(EXEC) pnpm --filter @ilhavera/server dev
 
-## Cliente web em modo watch, na porta 5173 do host
+## Cliente web em modo watch, na porta 5173 do host. Fala com o `make dev`.
 web:
 	$(EXEC) pnpm --filter @ilhavera/web dev
+
+## O mesmo cliente, com o motor rodando no navegador: sem servidor, sem sala.
+web-hotseat:
+	$(EXEC) env VITE_MODO=hot-seat pnpm --filter @ilhavera/web dev
 
 build:
 	$(EXEC) pnpm build

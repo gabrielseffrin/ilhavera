@@ -687,16 +687,91 @@ partidas de verdade.
 | Responsividade só até "não quebra em uma coluna"                                      | `apps/web/src/App.tsx`                                     | Fase 5 (tablet e celular em paisagem)                                        |
 | Sem navegação por teclado nos alvos do tabuleiro                                      | `src/board/Camada*.tsx`                                    | Fase 5, junto do resto da acessibilidade                                     |
 
-### Fase 4 — Integração multiplayer (2 semanas)
+### Fase 4 — Integração multiplayer (2 semanas) ✅
 
-- [ ] Trocar o motor local pelo socket como fonte de verdade
-- [ ] Tela de lobby: criar/entrar, escolher cor, host inicia
-- [ ] Indicadores de conexão por jogador
-- [ ] Tratamento e exibição de `game:error`
-- [ ] Fluxo completo de comércio entre jogadores (proposta, resposta, confirmação)
-- [ ] Reconexão transparente com tela de "reconectando..."
-- [ ] E2E Playwright com 4 navegadores
-- **Aceite:** 4 pessoas em máquinas diferentes concluem uma partida; um jogador fecha a aba, volta e continua
+- [x] Trocar o motor local pelo socket como fonte de verdade — `apps/web/src/estado/{driver,motorLocal,driverDeRede}.ts` (um `Driver` atrás da mesma superfície; o hot-seat continua sendo a outra implementação)
+- [x] Tela de lobby: criar/entrar, escolher cor, host inicia — `apps/web/src/telas/{Entrada,Sala}.tsx`, mais o comando `room:setColor`, que não existia
+- [x] Indicadores de conexão por jogador — `RoomView.connected` no lobby, `PublicPlayerView.connected` na partida
+- [x] Tratamento e exibição de `game:error` — pelo **ack**, que é a resposta autoritativa (ver abaixo)
+- [x] Fluxo completo de comércio entre jogadores — `src/hud/{ModalDeProposta,PainelDaProposta}.tsx`, contraproposta inclusive
+- [x] Reconexão transparente com tela de "reconectando..." — `src/telas/Reconectando.tsx`; quem volta não pede nada, o servidor empurra o snapshot
+- [x] ~~E2E Playwright com 4 navegadores~~ → aceite em vitest/jsdom com sockets de verdade (ver a dívida)
+- **Aceite:** ✅ **concluído em 14/08/2026** — `apps/web/test/multijogador.test.tsx`: três `<App/>` montados no mesmo documento, cada um com identidade, sessão e socket próprios, contra um servidor Fastify + Socket.IO no mesmo processo. Vão do apelido ao vencedor só clicando, e nenhuma tela pode mostrar `role="alert"` em nenhum clique. O segundo caso derruba uma aba no meio da partida, remonta com o mesmo token e termina a partida com quem voltou.
+
+#### As duas descobertas que mudaram o desenho
+
+**`state:patch` era inconsumível.** Ele levava `{ version, events }` — eventos
+narrativos, não estado. Em hot-seat o `mesa` é recalculado pelo motor que roda no
+próprio navegador; pelo socket não há motor, e derivar a projeção nova a partir
+de eventos semânticos exigiria reimplementar os 23 apliques do lado do cliente,
+que é a reimplementação que a §6.1 existe para evitar. O patch passou a carregar
+estado.
+
+Carregar a `ClientView` inteira resolveria e custaria caro: ~96% dela é o
+`board`, que não muda depois de `createGame`. Daí o corte em `ClientViewStatic`
+(id, settings, board — vai uma vez, no snapshot) e `ClientViewDynamic`. O log
+fica fora das duas metades porque só cresce, e por acréscimo: os eventos do patch
+já vêm projetados, então concatenar é exato. `toClientView` virou a composição
+das duas metades, de modo que campo novo sem lugar numa delas para de compilar —
+a fronteira de §4.5 continua sendo uma função só.
+
+**Enumerar jogadas no cliente seria errado, não só duplicado.** `isLegal` de
+`tradeConfirm` confere se o _parceiro_ tem os recursos, e é exatamente isso que
+`toClientView` apaga. Um enumerador sobre a projeção responderia com menos
+informação do que a pergunta exige. A lista sai do servidor, dentro das mensagens
+que já existem — evento separado seria uma lista chegando desacompanhada da
+versão a que pertence, o mesmo erro pelo qual `game:event` foi cortado.
+
+Das propostas de comércio vai **uma** amostra, não a lista inteira: o botão de
+propor precisa existir antes da proposta, mas um menu de vinte trocas 1:1 é
+interface pior do que compor os termos, e são ~1,5 KB por patch por jogador que
+ninguém vai clicar. Quem decide se dá para propor continua sendo `isLegal`.
+
+#### Como ficou
+
+**Nenhum componente do tabuleiro, da HUD ou dos modais mudou.** Era a aposta da
+Fase 3, e ela pagou: `jogo` sumiu do store, `mesa` passou a vir do
+`state:snapshot`, `executar` manda comando em vez de chamar `reduce`, e a
+interface não percebeu. O aceite da Fase 3 continua verde sem uma asserção
+alterada — é essa a prova de que a troca foi de origem, não de interface.
+
+**`ativo` continua sendo "quem a mesa espera", nos dois modos.** A tentação era
+dizer "em rede, sou eu"; isso quebraria a faixa (passaria a dizer sempre o meu
+nome) e o destaque no painel de adversários. `activePlayers` aceita `TurnScope`,
+que `ClientView` satisfaz, então a derivação é a mesma. Quem responde "posso agir
+agora?" é `legais.length > 0`, que já cobre o descarte paralelo.
+
+**Os modais fecham por jogada minha, não por versão.** No hot-seat as duas
+contagens andavam juntas. Em rede, `mesa.version` anda a cada jogada de cada
+adversário — e o compositor de troca fecharia no meio da digitação toda vez que
+alguém do outro lado colocasse uma estrada.
+
+**`game:error` não é assinado.** O ack é a resposta autoritativa, e dois caminhos
+para o mesmo alerta é o jogador ver duas vezes o que aconteceu uma vez. O evento
+continua sendo emitido pelo servidor e passa a ser candidato a sair do contrato,
+como `game:event` saiu.
+
+**Os stores deixaram de ser singletons de módulo.** Vivem num `Cliente` entregue
+por contexto, com o padrão como reserva — o que mantém `<App/>` montável cru.
+Sem isso, os três jogadores do aceite seriam a mesma tela e a mesma identidade.
+
+**`socket.auth` é mutado no `session:issued`.** Sem isso o handshake da primeira
+reconexão vai sem token, o servidor emite identidade nova, e o assento fica para
+trás. É a falha mais silenciosa da fase: só aparece depois de uma queda.
+
+#### Dívida assumida ao fechar a fase
+
+| Pendência                                                             | Onde                                  | Quando                                                               |
+| --------------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| E2E em navegador de verdade — o aceite é jsdom com sockets reais      | `apps/web/test/multijogador.test.tsx` | Fase 6, junto do deploy, onde há URL pública para apontar            |
+| Layout, toque e a diferença entre o WebSocket do jsdom e o do Chrome  | —                                     | idem                                                                 |
+| `game:error` declarado e não consumido: o ack é a autoridade          | `SERVER_EVENTS`                       | sai do contrato na Fase 5, como saiu o `game:event`                  |
+| Escape fecha o modal de todas as telas montadas (ouvinte em `window`) | `apps/web/src/hud/Modal.tsx`          | só afeta o teste multijogador; some se o ouvinte descer para o modal |
+| Snapshot de partida longa carrega o log inteiro                       | `toClientView`                        | Fase 5, se a reconexão pesar                                         |
+| Sem link de convite (`/sala/ABC234`): entra-se digitando o código     | `apps/web/src/telas/Entrada.tsx`      | Fase 5, se houver roteador por outro motivo                          |
+| Chat na sala (`chat:*` no contrato, sem handler)                      | `packages/protocol`                   | Fase 5, como o roadmap prevê                                         |
+| Expiração de salas (30 min / 24 h do ADR-003)                         | `Room.lastActivityAt`                 | herdada da Fase 2, sem mudança                                       |
+| `game_results` de §7 não criada                                       | `src/persistence/schema.ts`           | Fase 5, com a tela de fim de jogo                                    |
 
 ### Fase 5 — Polimento (2 semanas)
 

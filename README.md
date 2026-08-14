@@ -3,12 +3,11 @@
 Jogo de tabuleiro multiplayer de colonização por hexágonos, jogável pelo
 navegador, para partidas privadas entre amigos.
 
-**Estado atual: Fases 0 e 1 concluídas; Fase 2 em andamento.** O motor de regras
-está completo e testado, e já dá para jogar uma partida inteira pelo terminal —
-do sorteio do tabuleiro à vitória por 10 pontos. O servidor existe como
-esqueleto (sobe, responde `/health`, aceita sockets) e ainda não conhece o
-motor: salas e partida em rede são os próximos marcos. Interface gráfica é a
-Fase 3.
+**Estado atual: Fases 0 a 4 concluídas.** Dá para jogar de verdade: três ou
+quatro pessoas em máquinas diferentes entram numa sala por código e jogam do
+sorteio do tabuleiro à vitória por 10 pontos, com comércio entre jogadores e
+reconexão — quem fecha a aba volta e continua de onde parou. Falta o polimento
+(Fase 5) e o deploy (Fase 6).
 
 Especificação completa em [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -24,7 +23,15 @@ make test        # roda a suíte inteira
 make demo        # assiste a uma partida completa se jogando sozinha
 make play        # joga uma partida hot-seat no terminal
 make dev         # servidor de jogo em watch, na porta 3000
+make web         # cliente no navegador, na porta 5173
 ```
+
+Para jogar em rede são dois terminais: `make dev` e `make web`. Depois,
+`http://localhost:5173` em três abas — a primeira cria a sala, as outras entram
+pelo código de seis caracteres, e o anfitrião começa.
+
+Para mexer na interface sem servidor ao lado, `make web-hotseat`: o motor roda
+no próprio navegador e a partida acontece na mesma tela, uma pessoa por vez.
 
 Sem `make`, os mesmos comandos:
 
@@ -40,14 +47,17 @@ docker compose exec app pnpm play
 ```
 packages/rules/      ⭐ motor de regras: puro, determinístico, sem I/O
 packages/protocol/      esquemas dos comandos/eventos de rede
-apps/server/            Fastify + Socket.IO — servidor autoritativo (Fase 2)
+apps/server/            Fastify + Socket.IO — servidor autoritativo
+apps/web/               React + Vite — o tabuleiro e a HUD no navegador
 apps/cli/               partida hot-seat no terminal
 docs/                   roadmap, ADRs, schema do banco
 ```
 
-O motor é o coração do projeto e roda nos dois lados: no servidor decide o que
-é válido, no navegador destaca as jogadas possíveis antes do round-trip.
-Quando os dois discordam, **o servidor vence**.
+O motor é o coração do projeto. No servidor ele decide o que é válido; no
+navegador ele roda só no hot-seat, para desenvolver sem servidor ao lado. Em
+rede o cliente **não tem motor**: recebe o estado e a lista de jogadas legais
+prontos, porque enumerar exige informação que a projeção esconde de propósito —
+saber se o parceiro pode pagar uma troca, por exemplo.
 
 Três restrições sustentam isso, e todas são verificadas pelo CI:
 

@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "//exports": "Importável por `apps/web`, que sobe um servidor de verdade no aceite da Fase 4.",
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",

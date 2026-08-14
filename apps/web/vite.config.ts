@@ -21,6 +21,19 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./test/setup.ts'],
     include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
+    server: {
+      deps: {
+        /**
+         * O aceite da Fase 4 sobe um servidor de verdade no mesmo processo.
+         * Sem isto o vitest *inlina* os pacotes do workspace — eles não estão
+         * sob `node_modules/` de fato — e transforma o grafo do Fastify para o
+         * ambiente jsdom, onde `node:crypto` vira "externalized for browser
+         * compatibility" e o servidor morre por um motivo que nada tem a ver
+         * com o jogo.
+         */
+        external: ['@ilhavera/server'],
+      },
+    },
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts', 'src/**/*.tsx'],
