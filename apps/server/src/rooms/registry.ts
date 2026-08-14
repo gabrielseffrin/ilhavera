@@ -288,6 +288,36 @@ export class RoomRegistry {
     return { ok: true, value: { room, removed: true } };
   }
 
+  /**
+   * Troca a cor de um assento, no lobby.
+   *
+   * Só antes de `room:start`, e a razão é do motor, não do servidor: a cor entra
+   * em `createGame` e passa a ser como a pessoa aparece no tabuleiro. Trocá-la
+   * depois repintaria peças já construídas — as estradas de quem era vermelho
+   * viravam azuis sem que ninguém as tivesse movido.
+   *
+   * Escolher a cor que já é sua é idempotente: dois cliques rápidos no mesmo
+   * botão não deviam virar erro.
+   */
+  setColor(playerId: PlayerId, color: PlayerColor): RoomResult<Room> {
+    const room = this.byPlayer(playerId);
+    if (room === undefined) return { ok: false, error: 'NOT_IN_ROOM' };
+    if (room.status !== 'lobby') return { ok: false, error: 'ROOM_ALREADY_STARTED' };
+
+    const meu = room.seats.find((s) => s.playerId === playerId);
+    if (meu === undefined) return { ok: false, error: 'NOT_IN_ROOM' };
+    if (meu.color === color) return { ok: true, value: room };
+
+    if (room.seats.some((s) => s.color === color)) {
+      return { ok: false, error: 'COLOR_TAKEN' };
+    }
+
+    meu.color = color;
+    this.#touch(room);
+    this.#gravar(room);
+    return { ok: true, value: room };
+  }
+
   start(playerId: PlayerId): RoomResult<Room> {
     const room = this.byPlayer(playerId);
     if (room === undefined) return { ok: false, error: 'NOT_IN_ROOM' };

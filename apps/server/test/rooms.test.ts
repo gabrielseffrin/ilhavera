@@ -223,6 +223,116 @@ describe('room:join', () => {
   });
 });
 
+/**
+ * A cor não é enfeite: é como cada um se reconhece no tabuleiro. O servidor
+ * atribui a primeira livre para que a sala nunca fique sem, e o jogador troca se
+ * quiser — no lobby, e só no lobby.
+ */
+describe('room:setColor', () => {
+  it('troca a cor e conta para a sala inteira', async () => {
+    const s = await servidor();
+    const ana = await s.connect();
+    const criada = await ana.send<RoomView>('room:create', { nickname: 'Ana' });
+    if (!criada.ok) throw new Error('sala não criada');
+
+    const bruno = await s.connect();
+    await bruno.send('room:join', { code: criada.data.code, nickname: 'Bruno' });
+
+    const aviso = bruno.next<RoomView>('room:updated');
+    const ack = await ana.send<RoomView>('room:setColor', { color: 'green' });
+
+    expect(ack.ok).toBe(true);
+    if (!ack.ok) return;
+    expect(ack.data.players.find((j) => j.id === ana.playerId)?.color).toBe('green');
+    expect((await aviso).players.find((j) => j.id === ana.playerId)?.color).toBe('green');
+  });
+
+  it('recusa cor que já é de outro jogador', async () => {
+    const s = await servidor();
+    const ana = await s.connect();
+    const criada = await ana.send<RoomView>('room:create', { nickname: 'Ana' });
+    if (!criada.ok) throw new Error('sala não criada');
+
+    const bruno = await s.connect();
+    const entrou = await bruno.send<RoomView>('room:join', {
+      code: criada.data.code,
+      nickname: 'Bruno',
+    });
+    if (!entrou.ok) throw new Error('Bruno não entrou');
+
+    const daAna = entrou.data.players.find((j) => j.id === ana.playerId)?.color;
+    if (daAna === undefined) throw new Error('Ana sem cor');
+
+    expect(await bruno.send('room:setColor', { color: daAna })).toEqual({
+      ok: false,
+      error: 'COLOR_TAKEN',
+    });
+  });
+
+  it('escolher a própria cor de novo não é erro', async () => {
+    const s = await servidor();
+    const ana = await s.connect();
+    const criada = await ana.send<RoomView>('room:create', { nickname: 'Ana' });
+    if (!criada.ok) throw new Error('sala não criada');
+
+    const minha = criada.data.players[0]?.color;
+    if (minha === undefined) throw new Error('assento sem cor');
+
+    const ack = await ana.send<RoomView>('room:setColor', { color: minha });
+    expect(ack.ok).toBe(true);
+  });
+
+  it('recusa depois que a partida começou — a cor já virou peça no tabuleiro', async () => {
+    const s = await servidor();
+    const ana = await s.connect();
+    const criada = await ana.send<RoomView>('room:create', { nickname: 'Ana' });
+    if (!criada.ok) throw new Error('sala não criada');
+
+    for (const nome of ['Bruno', 'Carla']) {
+      const c = await s.connect();
+      await c.send('room:join', { code: criada.data.code, nickname: nome });
+    }
+    await ana.send('room:start');
+
+    expect(await ana.send('room:setColor', { color: 'green' })).toEqual({
+      ok: false,
+      error: 'ROOM_ALREADY_STARTED',
+    });
+  });
+
+  it('recusa quem não está em sala nenhuma, e cor que não existe', async () => {
+    const s = await servidor();
+    const solto = await s.connect();
+
+    expect(await solto.send('room:setColor', { color: 'red' })).toEqual({
+      ok: false,
+      error: 'NOT_IN_ROOM',
+    });
+    expect(await solto.send('room:setColor', { color: 'roxo' })).toEqual({
+      ok: false,
+      error: 'BAD_PAYLOAD',
+    });
+  });
+
+  it('a cor escolhida no lobby é a cor no tabuleiro', async () => {
+    const s = await servidor();
+    const ana = await s.connect();
+    const criada = await ana.send<RoomView>('room:create', { nickname: 'Ana' });
+    if (!criada.ok) throw new Error('sala não criada');
+
+    for (const nome of ['Bruno', 'Carla']) {
+      const c = await s.connect();
+      await c.send('room:join', { code: criada.data.code, nickname: nome });
+    }
+
+    await ana.send('room:setColor', { color: 'brown' });
+    await ana.send('room:start');
+
+    const jogo = s.server.rooms.byCode(criada.data.code)?.game;
+    expect(jogo?.state.players.find((j) => j.id === ana.playerId)?.color).toBe('brown');
+  });
+});
+
 describe('room:start', () => {
   async function lobby(quantos: number): Promise<{
     s: TestServer;

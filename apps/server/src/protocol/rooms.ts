@@ -79,6 +79,19 @@ export function registerRoomCommands(socket: GameSocket, deps: RoomDeps): void {
 
   handle(
     socket,
+    'room:setColor',
+    (payload, playerId) => {
+      const trocada = rooms.setColor(playerId, payload.color);
+      if (!trocada.ok) return { ok: false, error: trocada.error };
+
+      broadcastRoom(io, trocada.value);
+      return { ok: true, data: toRoomView(trocada.value) };
+    },
+    log,
+  );
+
+  handle(
+    socket,
     'room:start',
     (_payload, playerId) => {
       const iniciada = rooms.start(playerId);

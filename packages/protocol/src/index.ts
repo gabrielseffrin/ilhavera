@@ -8,7 +8,7 @@
  * `eslint.config.js` faz valer isso.
  */
 
-import { ERROR_LABELS } from '@ilhavera/rules';
+import { ERROR_LABELS, PLAYER_COLORS } from '@ilhavera/rules';
 import type {
   Action,
   ClientView,
@@ -44,6 +44,13 @@ export const TRADE_RESPONSE = z.discriminatedUnion('type', [
 const NICKNAME = z.string().trim().min(1).max(24);
 
 /**
+ * As cores vêm do motor, e não de uma lista escrita à mão aqui: quem desenha as
+ * peças é `PLAYER_COLORS`, e duas listas divergiriam no dia em que uma cor nova
+ * entrasse.
+ */
+export const PLAYER_COLOR = z.enum(PLAYER_COLORS as unknown as [PlayerColor, ...PlayerColor[]]);
+
+/**
  * Código de sala: 6 caracteres de um alfabeto sem `0/O` nem `1/I/L`, porque o
  * código é ditado em voz alta ou copiado de uma mensagem. Aceita minúsculas na
  * entrada e normaliza — quem digita não deve precisar saber disso.
@@ -71,6 +78,12 @@ export const COMMANDS = {
   'room:create': z.object({ nickname: NICKNAME, settings: ROOM_SETTINGS.default({}) }),
   'room:join': z.object({ code: ROOM_CODE, nickname: NICKNAME }),
   'room:leave': z.object({}),
+  /**
+   * Trocar de cor no lobby. Só antes de `room:start`: a cor entra no
+   * `createGame` e vira identidade da pessoa no tabuleiro — mudá-la no meio da
+   * partida trocaria de dono as peças já construídas.
+   */
+  'room:setColor': z.object({ color: PLAYER_COLOR }),
   'room:start': z.object({}),
 
   'game:placeSettlement': z.object({ vertexId: z.string() }),
@@ -238,6 +251,7 @@ export const ROOM_ERROR_CODES = [
   'ALREADY_IN_ROOM',
   'NOT_IN_ROOM',
   'NICKNAME_TAKEN',
+  'COLOR_TAKEN',
   /**
    * Comandos rápidos demais neste socket. Não é castigo: é o que impede um
    * cliente com laço maluco — ou alguém tentando de propósito — de consumir a
@@ -271,6 +285,7 @@ export const ROOM_ERROR_LABELS: Readonly<Record<RoomErrorCode, string>> = {
   ALREADY_IN_ROOM: 'Você já está em uma sala.',
   NOT_IN_ROOM: 'Você não está em nenhuma sala.',
   NICKNAME_TAKEN: 'Já tem alguém com esse apelido na sala.',
+  COLOR_TAKEN: 'Essa cor já é de outro jogador.',
   RATE_LIMITED: 'Calma — comandos demais em pouco tempo.',
 };
 
