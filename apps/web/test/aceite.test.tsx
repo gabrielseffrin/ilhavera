@@ -20,11 +20,10 @@
  * teste que ninguém roda.
  */
 
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { App } from '../src/App.js';
-import { usePartida } from '../src/estado/partida.js';
+import { montarHotSeat } from './helpers/hotseat.js';
 
 /** Teto de segurança. As sementes abaixo terminam em torno de mil. */
 const MAXIMO_DE_CLIQUES = 4000;
@@ -96,17 +95,21 @@ function proximoClique(container: HTMLElement, n: number): Element | null {
 describe('aceite da Fase 3: partida completa em hot-seat', () => {
   for (const semente of ['aceite-1', 'aceite-3']) {
     it(`vai do setup ao vencedor sem uma jogada recusada (semente ${semente})`, () => {
-      act(() => {
-        usePartida.getState().reiniciar(semente);
-      });
-      const { container, unmount } = render(<App />);
+      const { container, unmount, partida } = montarHotSeat(semente);
+
+      /** A mesa do hot-seat existe desde o primeiro render. */
+      const mesaAgora = (): NonNullable<ReturnType<typeof partida.getState>['mesa']> => {
+        const atual = partida.getState().mesa;
+        if (atual === null) throw new Error('hot-seat sem mesa');
+        return atual;
+      };
 
       let cliques = 0;
-      while (usePartida.getState().mesa.winner === null && cliques < MAXIMO_DE_CLIQUES) {
+      while (mesaAgora().winner === null && cliques < MAXIMO_DE_CLIQUES) {
         const alvo = proximoClique(container, cliques);
         if (alvo === null) {
           throw new Error(
-            `interface travada na fase ${usePartida.getState().mesa.phase} ` +
+            `interface travada na fase ${mesaAgora().phase} ` +
               `após ${cliques} cliques: nada para clicar e a partida não acabou`,
           );
         }
@@ -119,13 +122,13 @@ describe('aceite da Fase 3: partida completa em hot-seat', () => {
         // A tese da fase, verificada a cada clique.
         if (screen.queryByRole('alert') !== null) {
           throw new Error(
-            `clique ${cliques} recusado na fase ${usePartida.getState().mesa.phase}: ` +
+            `clique ${cliques} recusado na fase ${mesaAgora().phase}: ` +
               `${screen.getByRole('alert').textContent}`,
           );
         }
       }
 
-      const mesa = usePartida.getState().mesa;
+      const mesa = mesaAgora();
       expect(mesa.winner, `partida não terminou em ${cliques} cliques`).not.toBeNull();
       expect(mesa.phase).toBe('finished');
 

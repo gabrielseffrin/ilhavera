@@ -1,152 +1,29 @@
 /**
- * A casca da aplicação.
+ * A casca da aplicação: qual tela está no ar.
  *
- * Nesta fase o cliente roda o motor localmente (hot-seat) para que o tabuleiro
- * e o HUD possam ser construídos sem depender do servidor — é o item "modo
- * hot-seat local" da Fase 3. A ligação com o socket é a Fase 4; o contrato já
- * existe desde a Fase 2 e só o store muda.
+ * Três estados, um fluxo linear, e nenhuma navegação com semântica própria — um
+ * roteador custaria uma dependência e uma reescrita da casca para entregar zero.
+ * A chave é o próprio estado: existe mesa? existe sala? senão, a porta.
  *
- * Aqui só há composição. Tudo o que a tela mostra sai de `mesa`, a projeção do
- * jogador ativo, e nenhum componente abaixo daqui conhece `GameState`.
- *
- * Sobre o layout: `min-h-0` aparece em toda a cadeia de flex de propósito. Sem
- * ele o `overflow-y-auto` do histórico não segura nada e a página inteira cresce
- * até empurrar o tabuleiro para fora da tela — é o tropeço clássico de flexbox
- * aninhado, e custa caro descobrir depois.
+ * No hot-seat a mesa existe desde o primeiro render, e a casca cai direto no
+ * jogo. É o que mantém `pnpm dev` sozinho abrindo uma partida jogável, sem
+ * servidor ao lado, e é o que a suíte da Fase 3 continua montando.
  */
 
-import { useEffect, useMemo } from 'react';
-import { ERROR_LABELS, PHASE_LABELS, type Action } from '@ilhavera/rules';
-
-import { CamadaDoSaqueador } from './board/CamadaDoSaqueador.js';
-import { CamadaInterativa } from './board/CamadaInterativa.js';
-import { Pecas } from './board/Pecas.js';
-import { Tabuleiro } from './board/Tabuleiro.js';
-import { BarraDeAcoes } from './hud/BarraDeAcoes.js';
-import { FimDePartida } from './hud/FimDePartida.js';
-import { Modais } from './hud/Modais.js';
-import { PainelLateral } from './hud/PainelLateral.js';
-import { useInterface } from './estado/interface.js';
-import { usePartida } from './estado/partida.js';
+import { usePartida, useSala } from './estado/contexto.js';
+import { Entrada } from './telas/Entrada.js';
+import { Partida } from './telas/Partida.js';
+import { Reconectando } from './telas/Reconectando.js';
+import { Sala } from './telas/Sala.js';
 
 export function App(): React.JSX.Element {
   const mesa = usePartida((s) => s.mesa);
-  const ativo = usePartida((s) => s.ativo);
-  const legais = usePartida((s) => s.legais);
-  const erro = usePartida((s) => s.erro);
-  const executar = usePartida((s) => s.executar);
-  const reiniciar = usePartida((s) => s.reiniciar);
-  const limparErro = usePartida((s) => s.limparErro);
-
-  const modalAberto = useInterface((s) => s.modalAberto);
-  const hexDoSaqueador = useInterface((s) => s.hexDoSaqueador);
-  const abrirModal = useInterface((s) => s.abrirModal);
-  const escolherHex = useInterface((s) => s.escolherHex);
-  const fechar = useInterface((s) => s.fechar);
-
-  // Toda jogada aceita fecha o que estiver aberto: a versão só anda quando o
-  // motor aceitou, e o que o modal estava perguntando já foi respondido.
-  useEffect(() => {
-    fechar();
-  }, [mesa.version, fechar]);
-
-  const cores = useMemo(
-    () => Object.fromEntries(mesa.players.map((p) => [p.id, p.color])),
-    [mesa.players],
-  );
-
-  const alvosDoSaqueador = useMemo(() => legais.filter((a) => a.type === 'moveRobber'), [legais]);
-
-  const jogador = mesa.players.find((p) => p.id === ativo);
-
-  const escolher = (acao: Action): void => {
-    executar(acao);
-  };
+  const sala = useSala((s) => s.sala);
 
   return (
-    <main className="flex h-full flex-col gap-3 p-4">
-      <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <h1 className="text-xl font-semibold text-white drop-shadow">Ilhavera</h1>
-        <span className="text-sm text-white/80">hot-seat local</span>
-
-        <span className="ml-auto text-sm text-white/90">
-          {PHASE_LABELS[mesa.phase]} · turno {mesa.turnNumber}
-        </span>
-        <button
-          type="button"
-          onClick={() => {
-            reiniciar();
-          }}
-          className="rounded-lg bg-white/20 px-3 py-1 text-sm text-white transition hover:bg-white/30"
-        >
-          Nova partida
-        </button>
-      </header>
-
-      <FimDePartida mesa={mesa} />
-
-      {jogador !== undefined && mesa.winner === null && (
-        <p className="text-sm text-white" data-testid="vez-de">
-          Vez de <strong>{jogador.name}</strong>
-        </p>
-      )}
-
-      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
-        <section className="flex min-h-0 flex-1 flex-col gap-2">
-          <div className="min-h-0 flex-1">
-            <Tabuleiro estado={mesa}>
-              <Pecas
-                board={mesa.board}
-                buildings={mesa.buildings}
-                roads={mesa.roads}
-                cores={cores}
-              />
-              <CamadaDoSaqueador
-                board={mesa.board}
-                opcoes={alvosDoSaqueador}
-                aoEscolherHex={(hexId) => {
-                  const alvos = alvosDoSaqueador.filter((a) => a.hexId === hexId);
-                  // Um alvo só não merece pergunta: ou não há ninguém para
-                  // roubar, ou só há um. Perguntar seria cerimônia.
-                  if (alvos.length === 1) escolher(alvos[0] as Action);
-                  else escolherHex(hexId);
-                }}
-              />
-              <CamadaInterativa board={mesa.board} legais={legais} onEscolher={escolher} />
-            </Tabuleiro>
-          </div>
-
-          {/* A barra e o alerta ficam junto do tabuleiro: o erro precisa
-              aparecer onde se errou, não do outro lado da tela. */}
-          <BarraDeAcoes
-            legais={legais}
-            onEscolher={escolher}
-            onAbrir={(tipo) => {
-              // Abrir modal não é jogada e não limpa erro sozinho — sem isto o
-              // "Recursos insuficientes" acompanha o jogador por três turnos.
-              limparErro();
-              abrirModal(tipo);
-            }}
-          />
-
-          {erro !== null && (
-            <p role="alert" className="rounded-lg bg-red-950/80 px-3 py-2 text-sm text-red-50">
-              {ERROR_LABELS[erro]}
-            </p>
-          )}
-        </section>
-
-        <PainelLateral mesa={mesa} ativo={ativo} />
-      </div>
-
-      <Modais
-        mesa={mesa}
-        legais={legais}
-        modalAberto={modalAberto}
-        hexDoSaqueador={hexDoSaqueador}
-        aoEscolher={escolher}
-        aoFechar={fechar}
-      />
-    </main>
+    <>
+      {mesa !== null ? <Partida mesa={mesa} /> : sala !== null ? <Sala /> : <Entrada />}
+      <Reconectando />
+    </>
   );
 }

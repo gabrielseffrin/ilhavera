@@ -1,34 +1,52 @@
 /**
- * O store da partida — a única peça da interface que conhece `GameState`.
+ * O store da partida e o motor local por trás dele.
  *
- * Duas garantias vivem aqui, e as duas são sobre a Fase 4:
+ * Três garantias vivem aqui, e as três são sobre a fronteira que a Fase 4
+ * atravessou:
  *
- * - **`mesa` é a projeção, não o estado.** É o mesmo objeto que o servidor
- *   emite em `state:snapshot`. Se um dia o store passar a expor o estado cru
- *   "só para facilitar", a interface inteira passa a depender de um formato que
- *   o socket nunca vai entregar — e a troca da Fase 4 deixa de ser um arquivo;
+ * - **`mesa` é a projeção, não o estado.** É o mesmo objeto que o servidor emite
+ *   em `state:snapshot`. Se o store passasse a expor o estado cru "só para
+ *   facilitar", a interface inteira dependeria de um formato que o socket nunca
+ *   entrega;
+ * - **o `GameState` não é alcançável pelo store.** Ele existe dentro do motor
+ *   local e em nenhum outro lugar. Em rede não existe;
  * - **quem age nem sempre é o jogador da vez.** No descarte todos os devedores
- *   agem em paralelo, e `mesa` precisa acompanhar: quem está descartando tem
- *   que ver a própria mão, não a de quem rolou o dado.
+ *   agem em paralelo, e `mesa` precisa acompanhar: quem está descartando tem que
+ *   ver a própria mão, não a de quem rolou o dado.
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { jogadasLegais, jogadorAtivo, quemAge, usePartida } from '../src/estado/partida.js';
+import type { GameState } from '@ilhavera/rules';
+
+import { quemAge } from '../src/estado/driver.js';
+import { criarMotorLocal, type DriverLocal } from '../src/estado/motorLocal.js';
+import { criarStoreDaPartida, type StoreDaPartida } from '../src/estado/partida.js';
+
+let motor: DriverLocal;
+let store: StoreDaPartida;
+
+/** A mesa, sem o `null` do lobby: no hot-seat ela existe desde o início. */
+function mesa(): NonNullable<ReturnType<StoreDaPartida['getState']>['mesa']> {
+  const atual = store.getState().mesa;
+  if (atual === null) throw new Error('hot-seat sem mesa');
+  return atual;
+}
 
 beforeEach(() => {
-  usePartida.getState().reiniciar('store');
+  motor = criarMotorLocal('store');
+  store = criarStoreDaPartida(motor);
 });
 
 describe('projeção', () => {
   it('entrega a mão de quem está agindo e esconde a dos outros', () => {
-    const { mesa, ativo } = usePartida.getState();
+    const { ativo } = store.getState();
 
     expect(ativo).not.toBeNull();
-    expect(mesa.you?.id).toBe(ativo);
-    expect(mesa.you).toHaveProperty('resources');
+    expect(mesa().you?.id).toBe(ativo);
+    expect(mesa().you).toHaveProperty('resources');
 
-    for (const p of mesa.players) {
+    for (const p of mesa().players) {
       // A projeção troca a mão pelo total agregado — inclusive a do próprio
       // jogador na lista pública, que é onde é fácil escorregar.
       expect(p).not.toHaveProperty('resources');
@@ -38,62 +56,70 @@ describe('projeção', () => {
   });
 
   it('não expõe o baralho de Cartas de Progresso, só o tamanho', () => {
-    const { mesa } = usePartida.getState();
-
-    expect(mesa).not.toHaveProperty('devDeck');
-    expect(mesa.devDeckSize).toBe(25);
+    expect(mesa()).not.toHaveProperty('devDeck');
+    expect(mesa().devDeckSize).toBe(25);
   });
 
   it('anda a versão junto com o estado a cada jogada aceita', () => {
-    const { mesa, legais } = usePartida.getState();
-    const primeira = legais[0];
+    const antes = mesa().version;
+    const primeira = store.getState().legais[0];
     if (primeira === undefined) throw new Error('setup sem jogada legal');
 
-    usePartida.getState().executar(primeira);
+    store.getState().executar(primeira);
 
-    const depois = usePartida.getState();
-    expect(depois.mesa.version).toBe(mesa.version + 1);
-    expect(depois.mesa.version).toBe(depois.jogo.version);
+    expect(mesa().version).toBe(antes + 1);
+    expect(mesa().version).toBe(motor.estado().version);
+  });
+
+  it('o store não dá acesso ao `GameState` — nem por engano', () => {
+    expect(store.getState()).not.toHaveProperty('jogo');
+    expect(store.getState()).not.toHaveProperty('estado');
   });
 });
 
 describe('executar', () => {
   it('guarda a recusa e não mexe no estado', () => {
-    const antes = usePartida.getState().jogo;
-    const naoEDaVez = antes.players.find((p) => p.id !== jogadorAtivo(antes));
+    const antes = motor.estado();
+    const naoEDaVez = antes.players.find((p) => p.id !== quemAge(antes));
     if (naoEDaVez === undefined) throw new Error('mesa de um jogador só');
 
-    usePartida.getState().executar({
+    store.getState().executar({
       type: 'placeSettlement',
       player: naoEDaVez.id,
       vertexId: antes.board.vertexOrder[0] as string,
     });
 
-    const depois = usePartida.getState();
-    expect(depois.erro).toBe('NOT_YOUR_TURN');
-    expect(depois.jogo).toBe(antes);
+    expect(store.getState().erro).toBe('NOT_YOUR_TURN');
+    expect(motor.estado()).toBe(antes);
   });
 
   it('limpa o erro na jogada seguinte que dá certo', () => {
-    const { legais } = usePartida.getState();
-    usePartida.getState().executar({
-      type: 'buildCity',
-      player: jogadorAtivo(usePartida.getState().jogo) as string,
-      vertexId: usePartida.getState().jogo.board.vertexOrder[0] as string,
-    });
-    expect(usePartida.getState().erro).not.toBeNull();
+    const legais = store.getState().legais;
 
-    usePartida.getState().executar(legais[0] as (typeof legais)[number]);
-    expect(usePartida.getState().erro).toBeNull();
+    store.getState().executar({
+      type: 'buildCity',
+      player: quemAge(motor.estado()) as string,
+      vertexId: motor.estado().board.vertexOrder[0] as string,
+    });
+    expect(store.getState().erro).not.toBeNull();
+
+    store.getState().executar(legais[0] as (typeof legais)[number]);
+    expect(store.getState().erro).toBeNull();
+  });
+
+  it('conta as jogadas minhas — é o que fecha os modais', () => {
+    expect(store.getState().minhasJogadas).toBe(0);
+    store.getState().executar(store.getState().legais[0] as never);
+    expect(store.getState().minhasJogadas).toBe(1);
   });
 
   it('reiniciar volta à versão zero e troca de tabuleiro', () => {
-    const antes = usePartida.getState().mesa;
-    usePartida.getState().executar(usePartida.getState().legais[0] as never);
-    expect(usePartida.getState().mesa.version).toBe(1);
+    const antes = mesa();
+    store.getState().executar(store.getState().legais[0] as never);
+    expect(mesa().version).toBe(1);
 
-    usePartida.getState().reiniciar('outra-semente');
-    const depois = usePartida.getState().mesa;
+    store.getState().reiniciar('outra-semente');
+    const depois = mesa();
 
     expect(depois.version).toBe(0);
     expect(depois.board.hexOrder).toEqual(antes.board.hexOrder);
@@ -104,27 +130,32 @@ describe('executar', () => {
 
 describe('quemAge', () => {
   it('devolve o jogador da vez fora de descarte e de proposta', () => {
-    const jogo = usePartida.getState().jogo;
-    expect(quemAge(jogo)).toEqual([jogo.players[jogo.currentPlayerIndex]?.id]);
+    const jogo = motor.estado();
+    expect(quemAge(jogo)).toBe(jogo.players[jogo.currentPlayerIndex]?.id);
   });
 
-  it('devolve todos os devedores durante o descarte', () => {
-    const jogo = usePartida.getState().jogo;
-    const descartando = {
+  it('durante o descarte responde um devedor, e não o jogador da vez', () => {
+    const jogo = motor.estado();
+    const descartando: GameState = {
       ...jogo,
-      phase: 'discarding' as const,
+      phase: 'discarding',
       pendingDiscards: { bruno: 4, carla: 2 },
     };
 
-    expect(quemAge(descartando).sort()).toEqual(['bruno', 'carla']);
-    expect(jogadorAtivo(descartando)).not.toBe(jogo.players[jogo.currentPlayerIndex]?.id);
+    expect(['bruno', 'carla']).toContain(quemAge(descartando));
+    expect(quemAge(descartando)).not.toBe(jogo.players[jogo.currentPlayerIndex]?.id);
   });
 
-  it('não oferece jogada quando não há quem aja', () => {
-    const jogo = usePartida.getState().jogo;
-    const semJogadores = { ...jogo, players: [] };
+  it('devolve nulo quando não há quem aja', () => {
+    expect(quemAge({ ...motor.estado(), players: [] })).toBeNull();
+  });
 
-    expect(jogadorAtivo(semJogadores)).toBeNull();
-    expect(jogadasLegais(semJogadores)).toEqual([]);
+  /**
+   * A mesma função sobre a projeção. É o que permite ao driver de rede derivar
+   * `ativo` sem `GameState`: `activePlayers` pede `TurnScope`, e `ClientView`
+   * satisfaz. Se um dia deixar de satisfazer, é aqui que se descobre.
+   */
+  it('responde igual sobre a projeção e sobre o estado cru', () => {
+    expect(quemAge(mesa())).toBe(quemAge(motor.estado()));
   });
 });

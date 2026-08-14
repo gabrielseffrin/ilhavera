@@ -1,137 +1,110 @@
 /**
- * O estado da partida no navegador — modo hot-seat.
+ * O estado da partida no navegador.
  *
- * O motor roda aqui dentro, igualzinho ao do servidor: mesmo pacote, mesma
- * `reduce`, mesma semente. É o que §6.1 chama de "o maior ganho arquitetural do
- * projeto" — a validação da interface não é uma reimplementação das regras em
- * TypeScript, é *as* regras.
+ * A promessa que a Fase 3 fez está cumprida aqui: `jogo` sumiu, `mesa` passou a
+ * vir do `state:snapshot`, `executar` manda comando em vez de chamar `reduce` —
+ * **e nenhum componente mudou**. A interface consome `mesa`, que é o
+ * `ClientView` de `toClientView`, exatamente como consumia.
  *
- * **A interface nunca vê o `GameState`.** Ela vê `mesa`, que é o `ClientView`
- * produzido por `toClientView` — a mesma projeção que o servidor emite em
- * `state:snapshot` (§4.5). Duas consequências, e as duas importam:
+ * O que mudou de forma foi a origem: um `Driver` atrás da mesma superfície. O
+ * motor local continua servindo o hot-seat (desenvolver sem servidor é entrega
+ * da Fase 3, não rascunho), e o socket serve a partida de verdade.
  *
- * - a mão alheia fica escondida de graça, inclusive qual recurso foi roubado.
- *   Hot-seat é uma pessoa por vez no mesmo navegador, e "por vez" só significa
- *   alguma coisa se o próximo não puder ler a mão do anterior olhando a tela;
- * - a HUD nasce escrita contra o formato que a Fase 4 vai entregar pelo socket.
- *   Naquele dia, `jogo` some daqui, `mesa` passa a vir do snapshot, `executar`
- *   manda comando em vez de chamar `reduce` — e nenhum componente muda.
- *
- * O que **não** atravessa de graça: `enumerateLegalActions` exige `GameState`.
- * Por isso `legais` é derivado aqui e só aqui — na Fase 4 esta única função
- * vira "o servidor manda a lista". Se a chamada vazar para dentro dos
- * componentes, o problema deixa de ser uma função e passa a ser dezenas de
- * arquivos.
+ * `enumerateLegalActions` não aparece mais neste arquivo. No hot-seat ele mora
+ * no `motorLocal`, onde o `GameState` existe; em rede a lista vem pronta do
+ * servidor, porque enumerar precisa do estado cru que o cliente não tem — e não
+ * pode ter.
  */
 
-import { create } from 'zustand';
+import { createStore, useStore, type StoreApi } from 'zustand';
 
-import {
-  activePlayers,
-  createGame,
-  enumerateLegalActions,
-  reduce,
-  toClientView,
-  type Action,
-  type ClientView,
-  type ErrorCode,
-  type GameState,
-  type PlayerColor,
-  type PlayerId,
-} from '@ilhavera/rules';
+import type { Action, ClientView, PlayerId } from '@ilhavera/rules';
 
-export type JogadorInicial = { id: PlayerId; name: string; color: PlayerColor };
-
-export const JOGADORES_PADRAO: JogadorInicial[] = [
-  { id: 'ana', name: 'Ana', color: 'red' },
-  { id: 'bruno', name: 'Bruno', color: 'blue' },
-  { id: 'carla', name: 'Carla', color: 'white' },
-];
+import type { EstadoDaConexao } from '../rede/conexao.js';
+import { quemAge, type Driver, type Modo } from './driver.js';
 
 export type EstadoDaPartida = {
-  /** Só existe no hot-seat: some quando o servidor virar a fonte da verdade. */
-  jogo: GameState;
-  /** O que a interface consome. Na Fase 4 vem do `state:snapshot`. */
-  mesa: ClientView;
-  /** Quem precisa agir agora — nem sempre o jogador da vez. */
+  modo: Modo;
+  /** O que a interface consome. `null` enquanto não há partida — no lobby. */
+  mesa: ClientView | null;
+  /** Quem a mesa está esperando — nem sempre o jogador da vez. */
   ativo: PlayerId | null;
+  /** As jogadas oferecidas agora. Em rede, vêm do servidor. */
   legais: Action[];
-  /** Última recusa do motor, para a interface explicar em vez de só ignorar. */
-  erro: ErrorCode | null;
+  /**
+   * Última recusa. `string`, e não `ErrorCode`: o `Ack` do contrato declara
+   * `error: string` de propósito, para que um cliente desatualizado consiga
+   * dizer alguma coisa diante de um código que ainda não conhece.
+   */
+  erro: string | null;
+  conexao: EstadoDaConexao;
+  /**
+   * Quantas jogadas **minhas** foram aceitas.
+   *
+   * Existe por causa dos modais. No hot-seat, "a versão andou" e "a minha jogada
+   * foi aceita" eram a mesma coisa, e fechar o que estivesse aberto a cada
+   * versão funcionava. Em rede não são: a jogada de qualquer adversário andaria
+   * a versão e fecharia o compositor de troca no meio da digitação.
+   */
+  minhasJogadas: number;
 
   executar: (acao: Action) => void;
   reiniciar: (seed?: string) => void;
   limparErro: () => void;
 };
 
-/**
- * Quem precisa agir agora.
- *
- * Delega para `activePlayers` do motor: a mesma resposta que a CLI usa e que o
- * servidor precisa dar. No descarte todos os devedores agem em paralelo, e numa
- * proposta de troca quem responde é o alvo — assumir "sempre o jogador da vez"
- * travaria a interface na primeira rolagem de 7.
- */
-export function quemAge(jogo: GameState): PlayerId[] {
-  return activePlayers(jogo);
+export type StoreDaPartida = StoreApi<EstadoDaPartida>;
+
+export function criarStoreDaPartida(driver: Driver): StoreDaPartida {
+  const inicial = driver.inicial();
+
+  const store = createStore<EstadoDaPartida>((set, get) => ({
+    modo: driver.modo,
+    mesa: inicial?.mesa ?? null,
+    ativo: inicial === undefined || inicial === null ? null : quemAge(inicial.mesa),
+    legais: inicial?.legais ?? [],
+    erro: null,
+    conexao: 'ligando',
+    minhasJogadas: 0,
+
+    executar: (acao) => {
+      driver.executar(acao);
+    },
+
+    reiniciar: (seed) => {
+      driver.reiniciar?.(seed);
+      set({ erro: null });
+    },
+
+    limparErro: () => {
+      if (get().erro !== null) set({ erro: null });
+    },
+  }));
+
+  driver.assinar({
+    aoMudar: ({ mesa, legais }) => {
+      store.setState({
+        mesa,
+        legais,
+        ativo: quemAge(mesa),
+        // A recusa some quando alguma coisa anda: manter o alerta depois da
+        // jogada seguinte faria o erro acompanhar o jogador por três turnos.
+        erro: null,
+        minhasJogadas: driver.minhasJogadas(),
+      });
+    },
+    aoErrar: (codigo) => {
+      store.setState({ erro: codigo });
+    },
+    aoMudarConexao: (conexao) => {
+      store.setState({ conexao });
+    },
+  });
+
+  return store;
 }
 
-/** No hot-seat, o jogador local é o primeiro que precisa agir. */
-export function jogadorAtivo(jogo: GameState): PlayerId | null {
-  return quemAge(jogo)[0] ?? null;
+/** Hook sobre um store da partida — o padrão do zustand com store injetável. */
+export function useStoreDaPartida<T>(store: StoreDaPartida, seletor: (s: EstadoDaPartida) => T): T {
+  return useStore(store, seletor);
 }
-
-/** As jogadas legais de quem está agindo — a fonte do destaque no tabuleiro. */
-export function jogadasLegais(jogo: GameState): Action[] {
-  const ativo = jogadorAtivo(jogo);
-  return ativo === null ? [] : enumerateLegalActions(jogo, ativo);
-}
-
-function novaPartida(seed: string): GameState {
-  return createGame({ id: 'hot-seat', seed, players: JOGADORES_PADRAO });
-}
-
-/**
- * Deriva tudo de uma vez, dentro do `set`.
- *
- * Não é otimização prematura: `toClientView` reprojeta o log inteiro e
- * recalcula os pontos de vitória de todos os jogadores. Uma vez por jogada é
- * barato; uma vez por componente por render, com quatrocentos eventos no log,
- * não é. E seletor do zustand que constrói objeto novo a cada chamada
- * re-renderiza sem parar.
- */
-function derivar(jogo: GameState): Pick<EstadoDaPartida, 'jogo' | 'mesa' | 'ativo' | 'legais'> {
-  const ativo = jogadorAtivo(jogo);
-  return {
-    jogo,
-    ativo,
-    mesa: toClientView(jogo, ativo),
-    legais: ativo === null ? [] : enumerateLegalActions(jogo, ativo),
-  };
-}
-
-export const usePartida = create<EstadoDaPartida>((set, get) => ({
-  ...derivar(novaPartida('ilhavera')),
-  erro: null,
-
-  executar: (acao) => {
-    const resultado = reduce(get().jogo, acao);
-
-    // Jogada inválida é valor de retorno, nunca exceção — o contrato do motor
-    // vale igual no navegador. A interface mostra e segue.
-    if (!resultado.ok) {
-      set({ erro: resultado.error });
-      return;
-    }
-
-    set({ ...derivar(resultado.state), erro: null });
-  },
-
-  reiniciar: (seed = String(Date.now())) => {
-    set({ ...derivar(novaPartida(seed)), erro: null });
-  },
-
-  limparErro: () => {
-    set({ erro: null });
-  },
-}));
