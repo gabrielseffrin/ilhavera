@@ -14,25 +14,38 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { argv, exit, stdin, stdout } from 'node:process';
 
 import {
+  ACTION_LABELS,
   RESOURCES,
   RESOURCE_LABELS,
+  activePlayers,
   createGame,
+  describeAction,
+  describeEvent,
   emptyResourceCount,
   enumerateLegalActions,
+  groupActions,
   reduce,
   rng,
   victoryPoints,
   type Action,
   type GameState,
+  type NarrationOptions,
   type PlayerColor,
   type PlayerId,
   type ResourceCount,
 } from '@ilhavera/rules';
 
 import { EndOfInputError, LineReader } from './input.js';
-import { describeEvent } from './events.js';
-import { describeAction, groupActions, ACTION_GROUP_LABELS } from './menu.js';
 import { renderBank, renderBoard, renderHand, renderScoreboard, playerTag } from './render.js';
+
+/**
+ * A CLI escreve nome de jogador com cor de terminal; o motor narra em texto
+ * puro. É o único ponto em que as duas apresentações divergem, e é por isso que
+ * `playerName` é injetado em vez de o ANSI subir para `packages/rules`.
+ */
+function comCor(state: GameState): NarrationOptions {
+  return { playerName: (id) => playerTag(state, id) };
+}
 
 const CORES: PlayerColor[] = ['red', 'blue', 'white', 'orange'];
 
@@ -121,7 +134,7 @@ async function autoJogar(seed: string): Promise<void> {
     }
     for (const evento of state.log.slice(jaMostrado)) {
       if (evento.type === 'diceRolled' || evento.type === 'resourcesProduced') continue;
-      console.log(`  · ${describeEvent(state, evento)}`);
+      console.log(`  · ${describeEvent(state, evento, comCor(state))}`);
     }
     jaMostrado = state.log.length;
   }
@@ -287,22 +300,12 @@ function escolherPonderado(
 }
 
 /**
- * De quem é a vez de agir. No descarte, quem age é qualquer jogador com
- * pendência — não o jogador do turno.
+ * De quem é a vez de agir. `activePlayers` pode devolver vários — no descarte
+ * todos os devedores agem em paralelo —, mas num terminal só há um teclado:
+ * atende-se o primeiro, e o seguinte entra quando este resolver a pendência.
  */
 function atorDaVez(state: GameState): PlayerId {
-  if (state.phase === 'discarding') {
-    const pendentes = Object.keys(state.pendingDiscards);
-    if (pendentes.length > 0) return pendentes[0] as PlayerId;
-  }
-
-  const trade = state.activeTrade;
-  if (trade !== null && state.phase === 'main') {
-    const semResposta = trade.targets.filter((t) => trade.responses[t] === undefined);
-    if (semResposta.length > 0) return semResposta[0] as PlayerId;
-  }
-
-  return (state.players[state.currentPlayerIndex] as { id: PlayerId }).id;
+  return activePlayers(state)[0] as PlayerId;
 }
 
 function mostrarTela(state: GameState, ator: PlayerId, desdeLog: number): void {
@@ -315,7 +318,7 @@ function mostrarTela(state: GameState, ator: PlayerId, desdeLog: number): void {
   const novos = state.log.slice(desdeLog);
   if (novos.length > 0) {
     console.log('');
-    for (const evento of novos) console.log(`  · ${describeEvent(state, evento)}`);
+    for (const evento of novos) console.log(`  · ${describeEvent(state, evento, comCor(state))}`);
   }
 
   console.log('');
@@ -365,7 +368,7 @@ async function escolherAcao(
   console.log('');
   grupos.forEach((grupo, i) => {
     const quantidade = grupo.actions.length > 1 ? ` (${grupo.actions.length} opções)` : '';
-    console.log(`  ${i + 1}. ${ACTION_GROUP_LABELS[grupo.type]}${quantidade}`);
+    console.log(`  ${i + 1}. ${ACTION_LABELS[grupo.type]}${quantidade}`);
   });
   console.log('  l. ver o log completo    s. salvar replay    q. sair');
 
@@ -389,7 +392,7 @@ async function escolherAcao(
 async function escolherAlvo(rl: LineReader, state: GameState, acoes: Action[]): Promise<Action> {
   console.log('');
   acoes.forEach((acao, i) => {
-    console.log(`   ${i + 1}. ${describeAction(state, acao)}`);
+    console.log(`   ${i + 1}. ${describeAction(state, acao, comCor(state))}`);
   });
 
   while (true) {
@@ -474,7 +477,7 @@ function descarteAutomatico(state: GameState, ator: PlayerId, total: number): Ac
 function mostrarLogCompleto(state: GameState): void {
   console.log('\n=== LOG DA PARTIDA ===');
   state.log.forEach((evento, i) => {
-    console.log(`  ${String(i + 1).padStart(3)}. ${describeEvent(state, evento)}`);
+    console.log(`  ${String(i + 1).padStart(3)}. ${describeEvent(state, evento, comCor(state))}`);
   });
   console.log('======================\n');
 }

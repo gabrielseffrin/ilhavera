@@ -37,7 +37,7 @@ import type {
   VertexId,
 } from './types.js';
 import { countResources, playerPorts } from './query.js';
-import { victoryPoints } from './scoring/victory.js';
+import { scoreboard, victoryPoints, type VictoryBreakdown } from './scoring/victory.js';
 
 export type PublicPlayerView = {
   id: PlayerId;
@@ -89,8 +89,42 @@ export type ClientView = {
   devCardPlayedThisTurn: boolean;
   lastRoll: { dice: [number, number]; total: number } | null;
   winner: PlayerId | null;
+  /**
+   * O placar aberto, de onde veio cada ponto de cada jogador — **e `null`
+   * enquanto a partida não acabou**.
+   *
+   * É a única informação nesta projeção que deixa de ser oculta com o tempo, e
+   * por isso é a única que precisa ser lida como uma condição, não como um
+   * campo: `null` aqui não quer dizer "ainda não calculei", quer dizer "estes
+   * números continuam sendo segredo de quem os tem". Revelar as cartas de Ponto
+   * de Vitória alheias um turno antes da hora é entregar a partida.
+   *
+   * Não substitui `victoryPointsPublic`, que segue sendo o que a mesa enxerga
+   * durante o jogo. Isto é o que ela enxerga depois.
+   */
+  finalScores: Record<PlayerId, VictoryBreakdown> | null;
   log: GameEvent[];
 };
+
+/**
+ * A parte da projeção que **nunca muda** depois de `createGame`.
+ *
+ * O `board` é quase toda a projeção em bytes — 54 vértices com adjacências e
+ * pixels, 72 arestas, 19 hexágonos — e é constante da primeira jogada à última.
+ * Reenviá-lo a cada `state:patch`, para cada jogador, numa partida de centenas
+ * de ações, seria mandar o tabuleiro inteiro algumas centenas de vezes para não
+ * dizer nada de novo. O snapshot manda; o patch não repete.
+ */
+export type ClientViewStatic = Pick<ClientView, 'id' | 'settings' | 'board'>;
+
+/**
+ * O que muda a cada jogada — tudo menos o estático e o log.
+ *
+ * O log fica de fora porque só cresce, e por acréscimo: o `state:patch` já
+ * carrega os eventos daquela jogada, e o cliente os concatena. Mandá-lo inteiro
+ * seria reenviar o histórico da partida a cada jogada dela.
+ */
+export type ClientViewDynamic = Omit<ClientView, keyof ClientViewStatic | 'log'>;
 
 function publicPlayer(state: GameState, id: PlayerId): PublicPlayerView {
   const p = state.players.find((x) => x.id === id);
@@ -110,10 +144,10 @@ function publicPlayer(state: GameState, id: PlayerId): PublicPlayerView {
 }
 
 /**
- * Filtra o log. Hoje a única informação oculta em evento é qual recurso foi
+ * Filtra um evento. Hoje a única informação oculta em evento é qual recurso foi
  * roubado; ladrão e vítima veem, o resto da mesa só vê que houve roubo.
  */
-function projectEvent(event: GameEvent, viewerId: PlayerId | null): GameEvent {
+export function projectEvent(event: GameEvent, viewerId: PlayerId | null): GameEvent {
   if (event.type !== 'stolen') return event;
   if (viewerId !== null && (viewerId === event.actor || viewerId === event.data.from)) {
     return event;
@@ -121,7 +155,34 @@ function projectEvent(event: GameEvent, viewerId: PlayerId | null): GameEvent {
   return { ...event, data: { from: event.data.from, resource: null } };
 }
 
-export function toClientView(state: GameState, viewerId: PlayerId | null): ClientView {
+/**
+ * Filtra uma leva de eventos para um espectador.
+ *
+ * Existe para o `state:patch` do servidor (§5.2): o `reduce` devolve os eventos
+ * crus da ação, e mandá-los para a sala inteira vazaria o roubo — o mesmo
+ * descuido contra o qual o cabeçalho deste arquivo avisa, só que pelo canal do
+ * delta em vez do canal do estado. Quem emite estado passa por aqui ou por
+ * `toClientView`, nunca direto.
+ */
+export function projectEvents(
+  events: readonly GameEvent[],
+  viewerId: PlayerId | null,
+): GameEvent[] {
+  return events.map((e) => projectEvent(e, viewerId));
+}
+
+export function toClientViewStatic(state: GameState): ClientViewStatic {
+  return {
+    id: state.id,
+    settings: { ...state.settings },
+    board: state.board,
+  };
+}
+
+export function toClientViewDynamic(
+  state: GameState,
+  viewerId: PlayerId | null,
+): ClientViewDynamic {
   const self = viewerId === null ? undefined : state.players.find((p) => p.id === viewerId);
 
   const you: SelfPlayerView | null =
@@ -135,11 +196,8 @@ export function toClientView(state: GameState, viewerId: PlayerId | null): Clien
         };
 
   return {
-    id: state.id,
     version: state.version,
     phase: state.phase,
-    settings: { ...state.settings },
-    board: state.board,
     robberHex: state.robberHex,
     currentPlayerIndex: state.currentPlayerIndex,
     turnNumber: state.turnNumber,
@@ -160,6 +218,40 @@ export function toClientView(state: GameState, viewerId: PlayerId | null): Clien
     devCardPlayedThisTurn: state.devCardPlayedThisTurn,
     lastRoll: state.lastRoll === null ? null : { ...state.lastRoll },
     winner: state.winner,
-    log: state.log.map((e) => projectEvent(e, viewerId)),
+    /**
+     * A condição é `winner`, e não `phase === 'finished'`, porque é `winner`
+     * que o resto da projeção já usa para dizer que acabou — e duas condições
+     * para o mesmo fato são duas chances de uma delas mudar sozinha.
+     */
+    finalScores: state.winner === null ? null : scoreboard(state),
   };
+}
+
+/**
+ * A projeção completa. Composta das duas metades de propósito: acrescentar um
+ * campo a `ClientView` sem colocá-lo numa das metades para de compilar aqui, que
+ * é exatamente onde se quer descobrir que o `state:patch` deixou de contar algo.
+ */
+export function toClientView(state: GameState, viewerId: PlayerId | null): ClientView {
+  return {
+    ...toClientViewStatic(state),
+    ...toClientViewDynamic(state, viewerId),
+    log: projectEvents(state.log, viewerId),
+  };
+}
+
+/**
+ * Remonta a projeção no cliente a partir de um `state:patch`.
+ *
+ * O cliente não tem motor: ele não deriva o estado novo dos eventos, ele o
+ * **recebe**. Os eventos entram só no log, e entram por acréscimo porque já vêm
+ * projetados por `projectEvents` — a mesma filtragem que `toClientView` aplica
+ * ao log inteiro. Concatenar é exato, não aproximação.
+ */
+export function applyClientViewPatch(
+  anterior: ClientView,
+  dynamic: ClientViewDynamic,
+  events: readonly GameEvent[],
+): ClientView {
+  return { ...anterior, ...dynamic, log: [...anterior.log, ...events] };
 }

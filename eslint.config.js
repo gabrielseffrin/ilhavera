@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 /**
  * Lista de builtins do Node. Usada para impedir que o motor de regras
@@ -119,6 +120,42 @@ export default tseslint.config(
           object: 'Date',
           property: 'now',
           message: 'Não-determinístico. O motor não conhece tempo.',
+        },
+      ],
+    },
+  },
+
+  /**
+   * O cliente web. As regras dos hooks não são estilo: `useEffect` com lista de
+   * dependências errada vira tabuleiro que não redesenha, e é o tipo de bug que
+   * some quando se procura e volta na demonstração.
+   */
+  {
+    files: ['apps/web/**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+    },
+  },
+
+  /**
+   * O `protocol` deixou de ser só esquemas quando ganhou a tradução
+   * comando→ação: agora depende de `rules` e é compartilhado com o cliente da
+   * Fase 3. A seta permitida é `protocol → rules`; qualquer coisa vinda de
+   * `apps/` inverteria a direção e prenderia o pacote ao servidor.
+   */
+  {
+    files: ['packages/protocol/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/apps/**', '@ilhavera/cli', '@ilhavera/server', '@ilhavera/web'],
+              message: 'packages/protocol não pode importar nada de apps/.',
+            },
+          ],
         },
       ],
     },

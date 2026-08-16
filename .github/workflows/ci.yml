@@ -17,6 +17,28 @@ jobs:
   verificar:
     name: lint + typecheck + testes
     runs-on: ubuntu-latest
+
+    # A suíte de persistência roda contra Postgres de verdade. Sem isto, o
+    # adaptador que roda em produção seria o único código sem teste — e é ele
+    # que decide se uma partida sobrevive a um deploy.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ilhavera
+          POSTGRES_PASSWORD: ilhavera
+          POSTGRES_DB: ilhavera
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ilhavera -d ilhavera"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://ilhavera:ilhavera@localhost:5432/ilhavera
+
     steps:
       - uses: actions/checkout@v4
 
@@ -47,8 +69,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cobertura-rules
-          path: packages/rules/coverage
+          name: cobertura
+          path: |
+            packages/rules/coverage
+            apps/server/coverage
           retention-days: 7
 
   imagem:

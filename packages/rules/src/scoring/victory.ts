@@ -79,3 +79,20 @@ export function victoryPoints(
 export function hasWon(state: GameState, playerId: PlayerId): boolean {
   return victoryPoints(state, playerId, true).total >= state.settings.targetVictoryPoints;
 }
+
+/**
+ * O placar de todos os jogadores com as cartas de Ponto de Vitória **reveladas**.
+ *
+ * Não filtra nada, e é por isso que não pode ser chamada em qualquer momento:
+ * quem a usa assume a responsabilidade de só expô-la quando a partida acabou.
+ * Hoje há dois desses lugares — `toClientView`, que a inclui apenas com
+ * `winner !== null`, e o diário de `game_results` (§7), que só grava no fim.
+ *
+ * Existe como função própria para que os dois leiam o mesmo placar. O servidor
+ * gravar um total e a tela mostrar outro seria o tipo de divergência que só
+ * aparece meses depois, quando alguém for conferir por que a estatística não
+ * bate com o que a mesa viu.
+ */
+export function scoreboard(state: GameState): Record<PlayerId, VictoryBreakdown> {
+  return Object.fromEntries(state.players.map((p) => [p.id, victoryPoints(state, p.id, true)]));
+}

@@ -7,5 +7,33 @@ export default defineConfig({
     // paralelo dentro do mesmo arquivo embaralharia o desligamento.
     fileParallelism: false,
     testTimeout: 15_000,
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts'],
+      exclude: [
+        // `main.ts` é só o entrypoint que amarra config, servidor e sinais do
+        // processo — quem o exercita é `docker compose up`, não o vitest.
+        'src/main.ts',
+        // Módulo só de tipos: o v8 reporta 0/0 como 0% e polui o relatório.
+        'src/protocol/types.ts',
+        /**
+         * Sem banco não há como exercitar o adaptador de banco, e o relatório
+         * mediria a ausência do Postgres em vez da qualidade do código. O CI
+         * define `DATABASE_URL`, então lá ele **é** medido — que é o ponto:
+         * ninguém consegue mandar adaptador sem teste para o repositório.
+         */
+        ...(process.env['DATABASE_URL'] === undefined ? ['src/persistence/postgres.ts'] : []),
+      ],
+      reporter: ['text', 'html'],
+      // Mais baixo que o do motor de propósito: aqui o que se testa é a borda
+      // (validação, ack, broadcast), não regra de jogo. Ainda assim falha o
+      // build — é o que impede a suíte de socket de apodrecer.
+      thresholds: {
+        lines: 90,
+        functions: 85,
+        branches: 85,
+        statements: 90,
+      },
+    },
   },
 });

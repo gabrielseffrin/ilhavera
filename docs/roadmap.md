@@ -365,6 +365,16 @@ Todos os comandos carregam um `requestId` (idempotência) e são respondidos com
 
 **Regra de consistência:** todo `state:patch` carrega `version`. Se o cliente detectar salto de versão, pede `state:resync` e o servidor devolve um `state:snapshot` completo.
 
+**Como ficou na implementação (M4).** Estado nunca sai para a sala inteira: `state:snapshot` e `state:patch` são emitidos **por jogador**, endereçados a uma sala privada por `playerId`, e sempre pela projeção (`toClientView` para o estado, `projectEvents` para o delta). Emitir os eventos crus do `reduce` para a sala vazaria qual recurso foi roubado — a mesma fronteira de §4.5, pelo canal do delta.
+
+`state:patch` carrega `{ version, events }`, então os eventos narrativos já viajam nele. `game:event` continua declarado no protocolo mas **não é emitido**: um segundo canal com a mesma informação só cria duas versões da verdade para divergirem. Se o cliente da Fase 3 não pedir por ele, sai do contrato.
+
+`game:error` vai só ao socket que enviou o comando recusado, e não se repete em reenvio deduplicado. É redundante com o `ack` de propósito: o `ack` é a resposta autoritativa, o evento é a cópia para o log da interface, que assina um fluxo só.
+
+`state:resync` (M6) é **comando**, e não evento, porque quem sabe que perdeu algo é o cliente: o servidor não distingue um patch que não chegou de um que chegou e ainda não foi processado. Responde no ack e como `state:snapshot`, e vai só ao socket que pediu. Quem reconecta recebe o snapshot sem precisar pedir; o `state:resync` é para o salto de versão percebido com a conexão de pé.
+
+Todo comando passa por um limite de ritmo por socket (M7): `RATE_LIMITED` no ack quando o balde esvazia. O limite é cobrado **antes** da validação, então quem atropela com payload inválido ouve sobre o ritmo, não sobre o payload.
+
 ### 5.3 Códigos de erro (exemplos)
 
 `NOT_YOUR_TURN`, `INVALID_PHASE`, `INSUFFICIENT_RESOURCES`, `DISTANCE_RULE_VIOLATION`, `VERTEX_OCCUPIED`, `ROAD_NOT_CONNECTED`, `NO_PIECES_LEFT`, `DEV_CARD_ALREADY_PLAYED`, `DEV_CARD_BOUGHT_THIS_TURN`, `ROBBER_SAME_HEX`, `BANK_DEPLETED`, `TRADE_EXPIRED`.
@@ -570,53 +580,578 @@ Premissa de estimativa: **1 desenvolvedor, meio período (~12h/semana)**. Com de
 - [x] **CLI de partida hot-seat no terminal** para jogar uma partida completa sem UI — `apps/cli/`, menu montado a partir de `enumerateLegalActions`
 - **Aceite:** ✅ partida completa jogável pelo terminal (`make play`, `make demo`); 10.000 partidas aleatórias sem violar invariantes — `make heavy` em 11/08/2026, 10 testes passando em 21min (1.259s), invariantes checados **após cada ação** de cada partida, mais mesas de 3 jogadores e modo de tabuleiro aleatório puro, mais 2.000 runs de replay determinístico
 
-### Fase 2 — Servidor e protocolo (2 semanas)
+### Fase 2 — Servidor e protocolo (2 semanas) ✅
 
-- [ ] Fastify + Socket.IO, health check
-- [ ] Identidade de jogador por token no localStorage
-- [ ] Criação/entrada em sala por código de 6 caracteres
-- [ ] `GameRoom`: estado vivo, fila de comandos serializada por sala
-- [ ] Validação de payload com zod na borda
-- [ ] Broadcast de `state:patch` + `state:snapshot`
-- [ ] Persistência: snapshots + `game_actions`
-- [ ] Reconexão com resync
-- [ ] Rate limit por socket
-- **Aceite:** dois clientes de teste (scripts Node) jogam uma partida completa via WebSocket; matar o servidor no meio e subir de novo restaura a partida
+Os sub-marcos M1–M7 abaixo são a ordem em que a fase foi entregue, e aparecem nas mensagens de commit.
 
-### Fase 3 — Cliente: tabuleiro e HUD (3–4 semanas)
+- [x] **M1** — Fastify + Socket.IO, health check — `apps/server/src/app.ts`
+- [x] **M2** — Identidade de jogador por token no localStorage — `src/identity/players.ts` (token opaco `id.segredo`, verificação com SHA-256 e `timingSafeEqual`)
+- [x] **M2** — Criação/entrada em sala por código de 6 caracteres — `src/rooms/`, comandos `room:*`
+- [x] **M3** — `GameRoom`: estado vivo, fila de comandos serializada por sala — `src/game/room.ts` (idempotência por `${playerId}:${requestId}`, com o ack anterior repetido verbatim)
+- [x] **M3** — Validação de payload com zod na borda — `src/protocol/handle.ts`, tradução comando→ação em `packages/protocol/src/actions.ts`
+- [x] **M4** — Broadcast de `state:patch` + `state:snapshot` — `src/protocol/game.ts` (emitidos **por jogador**, sempre pela projeção; nunca `io.to(code)` com estado cru)
+- [x] **M5** — Persistência: snapshots + `game_actions` — `src/persistence/` (porta com dois adaptadores; migração Drizzle aplicada no boot; restauração por snapshot + replay)
+- [x] **M6** — Reconexão com resync — reconexão devolve `state:snapshot` sem pedir; `state:resync` atende quando o cliente detecta salto de versão
+- [x] **M7** — Rate limit por socket — `src/protocol/rate-limit.ts` (balde de fichas, 30 de rajada e 10/s por padrão, configurável)
+- **Aceite:** ✅ **concluído em 12/08/2026**
+  - **partida completa via WebSocket** — `apps/server/test/full-game.test.ts`: quatro partidas do lobby ao vencedor, ~500 jogadas cada, só por socket. Juntas exercitam quinze tipos de ação, incluindo descarte paralelo e comércio entre jogadores (propor → responder → confirmar).
+  - **queda no meio da partida** — `apps/server/test/restore.test.ts`: mata o servidor, sobe outro do mesmo banco e a mesa termina o setup pela rede. Roda contra as duas lojas; só o Postgres prova que o estado atravessa o JSONB.
 
-- [ ] Layout SVG do tabuleiro com coordenadas pré-calculadas
-- [ ] Renderização de hexágonos, fichas numéricas, portos, Saqueador
-- [ ] Camadas interativas de vértices e arestas com destaque de jogadas válidas (usando `@game/rules` local)
-- [ ] Peças (estradas, assentamentos, cidades) por cor de jogador
-- [ ] Painel de mão de recursos e cartas de progresso
-- [ ] Painel de adversários (contagem de cartas, PV público, bônus)
-- [ ] Dados animados e log de eventos textual
-- [ ] Modais: descarte, escolha de alvo do roubo, Monopólio, Descoberta
-- [ ] Modo hot-seat local (contra o motor no browser) para desenvolver sem servidor
-- **Aceite:** partida completa jogável em hot-seat no navegador
+#### O que a M5 grava, e quando
 
-### Fase 4 — Integração multiplayer (2 semanas)
+| Momento                                    | Escrita                   | Esperada?                            |
+| ------------------------------------------ | ------------------------- | ------------------------------------ |
+| emissão de token                           | `players`                 | não — o handshake não espera o banco |
+| `room:create` / `join` / `leave` / `start` | `rooms` + `room_players`  | não                                  |
+| criação da partida                         | `game_snapshots` versão 0 | não                                  |
+| jogada aceita                              | `game_actions`            | **sim**, antes do ack                |
+| fim de turno                               | `game_snapshots`          | **sim**, junto da ação               |
 
-- [ ] Trocar o motor local pelo socket como fonte de verdade
-- [ ] Tela de lobby: criar/entrar, escolher cor, host inicia
-- [ ] Indicadores de conexão por jogador
-- [ ] Tratamento e exibição de `game:error`
-- [ ] Fluxo completo de comércio entre jogadores (proposta, resposta, confirmação)
-- [ ] Reconexão transparente com tela de "reconectando..."
-- [ ] E2E Playwright com 4 navegadores
-- **Aceite:** 4 pessoas em máquinas diferentes concluem uma partida; um jogador fecha a aba, volta e continua
+Só as escritas da partida são esperadas — era para isso que a fila da M3 existia. As demais são disparadas em segundo plano, com a rejeição tratada: perder o servidor porque o `UPDATE` de um apelido falhou seria trocar arranhão por amputação. Falha de gravação **não** desfaz a jogada; ela já aconteceu no motor e os outros jogadores já a viram no `state:patch`.
 
-### Fase 5 — Polimento (2 semanas)
+`PlayerState.connected` fica fora do banco de propósito: é estado de runtime, e gravar a cada desconexão daria tempestade de escrita sem nada em troca. Quem volta de um reinício volta como desconectado, e a primeira reconexão corrige.
 
-- [ ] Responsividade (tablet e celular em paisagem)
-- [ ] Chat na sala
-- [ ] Timer de turno configurável + auto-passe do turno em AFK
-- [ ] Feedback sonoro e animações de transição
-- [ ] Tela de fim de partida com placar detalhado
-- [ ] Acessibilidade: navegação por teclado, contraste, rótulos ARIA no SVG, paleta segura para daltônicos
-- [ ] i18n (pt-BR no MVP, estrutura pronta para en)
-- **Aceite:** heurística de usabilidade com 4 jogadores sem precisar de explicação prévia da interface
+#### Dívida assumida ao fechar a fase
+
+Nada disto bloqueia a Fase 3, e cada item está aqui porque foi decidido, não esquecido.
+
+| Pendência                                                                | Onde                                        | Quando                                       |
+| ------------------------------------------------------------------------ | ------------------------------------------- | -------------------------------------------- |
+| Chat na sala (`chat:send`/`chat:message` estão no contrato, sem handler) | `packages/protocol`                         | Fase 5, como o roadmap prevê                 |
+| Expiração de salas (30 min / 24 h do ADR-003)                            | `Room.lastActivityAt`, escrito e nunca lido | quando houver operação de verdade a proteger |
+| `game:event` declarado e não emitido                                     | `SERVER_EVENTS`                             | sai do contrato se a Fase 3 não pedir        |
+| `game_results` de §7 não criada                                          | `src/persistence/schema.ts`                 | com a tela de fim de jogo (Fase 5)           |
+| Limite por IP, para quem abre mil sockets                                | —                                           | Fase 6, junto do proxy                       |
+| Adapter Redis do Socket.IO (`InterServerEvents` vazio)                   | `src/protocol/types.ts`                     | só ao escalar para mais de um nó             |
+
+### Fase 3 — Cliente: tabuleiro e HUD (3–4 semanas) ✅
+
+- [x] Layout SVG do tabuleiro com coordenadas pré-calculadas — `apps/web/src/board/{Tabuleiro,geometria}.tsx` (o `viewBox` vem dos hexágonos, então o tabuleiro de 5–6 jogadores de §1 já cabe)
+- [x] Renderização de hexágonos, fichas numéricas, portos, Saqueador — `src/board/{Hexagono,Portos,Saqueador}.tsx`
+- [x] Camadas interativas de vértices e arestas com destaque de jogadas válidas — `src/board/CamadaInterativa.tsx`, alimentada por `enumerateLegalActions`
+- [x] Peças (estradas, assentamentos, cidades) por cor de jogador — `src/board/Pecas.tsx`
+- [x] Painel de mão de recursos e cartas de progresso — `src/hud/PainelDaMao.tsx`
+- [x] Painel de adversários (contagem de cartas, PV público, bônus) — `src/hud/PainelDeAdversarios.tsx`
+- [x] Dados animados e log de eventos textual — `src/hud/{Dados,LogDeEventos}.tsx`, narração vinda de `packages/rules/src/narrate.ts`
+- [x] Modais: descarte, escolha de alvo do roubo, Monopólio, Descoberta — `src/hud/Modal*.tsx`, mais comércio com o banco (ver abaixo)
+- [x] Modo hot-seat local (contra o motor no browser) para desenvolver sem servidor — `src/estado/partida.ts`
+- **Aceite:** ✅ **partida completa jogável em hot-seat no navegador** — `apps/web/test/aceite.test.tsx`: um robô joga do setup à vitória tocando só no que a interface desenhou, em duas sementes, e o teste falha se qualquer clique oferecido produzir um `role="alert"`.
+
+#### Como ficou
+
+**A interface nunca vê o `GameState`.** Ela consome `mesa`, que é o `ClientView`
+de `toClientView` — a mesma projeção que o servidor emite em `state:snapshot`
+desde a M4. Ler o estado cru, que está ali do lado no hot-seat, faria a Fase 4
+virar reescrita. Assim, dois ganhos de uma vez: a mão alheia fica escondida sem
+esforço (hot-seat só quer dizer alguma coisa se o próximo jogador não puder ler
+a mão do anterior na tela), e a HUD nasce escrita contra o formato que o socket
+vai entregar.
+
+O que **não** atravessa de graça está na tabela de dívida: `enumerateLegalActions`
+exige `GameState`. A chamada foi contida em `src/estado/partida.ts` e só ali, o
+que reduz a Fase 4 a uma função em vez de dezenas de arquivos.
+
+**Três dos quatro modais não sabem uma regra sequer.** Monopólio, Descoberta,
+comércio com o banco e a vítima do roubo saem prontos do enumerador. O descarte
+é a exceção, e é o próprio motor que explica em `legal.ts`: descartes possíveis
+são exponenciais na mão, então ele gera só duas heurísticas e deixa a UI montar
+o resto — o botão "automático" reaproveita a primeira heurística em vez de
+reimplementá-la.
+
+**O destino do Saqueador se escolhe no tabuleiro**, não numa lista de dezoito
+linhas: a decisão depende de olhar quem está em volta, e isso só o desenho conta.
+
+**Comércio com o banco foi antecipado da Fase 4.** Sem ele, uma mão desequilibrada
+nunca vira cidade e a mesa trava — o aceite pede "partida completa", e a CLI da
+Fase 1 já tinha a válvula. O que a Fase 4 pede é outra coisa (proposta, resposta
+e confirmação **entre jogadores**), que depende de vários clientes.
+
+**A narração saiu do `apps/cli` para o motor** (`packages/rules/src/narrate.ts`).
+O texto dos 23 eventos já existia em português desde a Fase 1, mas dentro de
+`apps/`, que `packages/` não pode importar. A saída fácil seria a segunda
+tradução no navegador — a mesma escolha que §6.1 rejeita para as regras, com o
+agravante de que texto diverge calado. `NarrationScope` pede só o tabuleiro e o
+nome e a cor de cada jogador, forma que `GameState` e `ClientView` satisfazem sem
+conversão; o ANSI da CLI entra por injeção. De quebra, um `switch` de 23 casos
+que não tinha um teste passou a ser verificado narrando o log inteiro de quatro
+partidas de verdade.
+
+#### Dívida assumida ao fechar a fase
+
+| Pendência                                                                             | Onde                                                       | Quando                                                                       |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `enumerateLegalActions` exige `GameState`, e o cliente da Fase 4 só terá `ClientView` | `apps/web/src/estado/partida.ts`                           | Fase 4: ou o servidor manda a lista, ou nasce um enumerador sobre a projeção |
+| Comércio entre jogadores (propor, responder, confirmar)                               | `enumerateLegalActions` com `includeTradeOffers` desligado | Fase 4, como o roadmap prevê                                                 |
+| Contraproposta existe no motor e nunca é enumerada                                    | `packages/rules/src/legal.ts`                              | com a tela de negociação da Fase 4                                           |
+| Tela de fim de partida é uma faixa, sem placar detalhado                              | `apps/web/src/hud/FimDePartida.tsx`                        | Fase 5, como o roadmap prevê                                                 |
+| Responsividade só até "não quebra em uma coluna"                                      | `apps/web/src/App.tsx`                                     | Fase 5 (tablet e celular em paisagem)                                        |
+| Sem navegação por teclado nos alvos do tabuleiro                                      | `src/board/Camada*.tsx`                                    | Fase 5, junto do resto da acessibilidade                                     |
+
+### Fase 4 — Integração multiplayer (2 semanas) ✅
+
+- [x] Trocar o motor local pelo socket como fonte de verdade — `apps/web/src/estado/{driver,motorLocal,driverDeRede}.ts` (um `Driver` atrás da mesma superfície; o hot-seat continua sendo a outra implementação)
+- [x] Tela de lobby: criar/entrar, escolher cor, host inicia — `apps/web/src/telas/{Entrada,Sala}.tsx`, mais o comando `room:setColor`, que não existia
+- [x] Indicadores de conexão por jogador — `RoomView.connected` no lobby, `PublicPlayerView.connected` na partida
+- [x] Tratamento e exibição de `game:error` — pelo **ack**, que é a resposta autoritativa (ver abaixo)
+- [x] Fluxo completo de comércio entre jogadores — `src/hud/{ModalDeProposta,PainelDaProposta}.tsx`, contraproposta inclusive
+- [x] Reconexão transparente com tela de "reconectando..." — `src/telas/Reconectando.tsx`; quem volta não pede nada, o servidor empurra o snapshot
+- [x] ~~E2E Playwright com 4 navegadores~~ → aceite em vitest/jsdom com sockets de verdade (ver a dívida)
+- **Aceite:** ✅ **concluído em 14/08/2026** — `apps/web/test/multijogador.test.tsx`: três `<App/>` montados no mesmo documento, cada um com identidade, sessão e socket próprios, contra um servidor Fastify + Socket.IO no mesmo processo. Vão do apelido ao vencedor só clicando, e nenhuma tela pode mostrar `role="alert"` em nenhum clique. O segundo caso derruba uma aba no meio da partida, remonta com o mesmo token e termina a partida com quem voltou.
+
+#### As duas descobertas que mudaram o desenho
+
+**`state:patch` era inconsumível.** Ele levava `{ version, events }` — eventos
+narrativos, não estado. Em hot-seat o `mesa` é recalculado pelo motor que roda no
+próprio navegador; pelo socket não há motor, e derivar a projeção nova a partir
+de eventos semânticos exigiria reimplementar os 23 apliques do lado do cliente,
+que é a reimplementação que a §6.1 existe para evitar. O patch passou a carregar
+estado.
+
+Carregar a `ClientView` inteira resolveria e custaria caro: ~96% dela é o
+`board`, que não muda depois de `createGame`. Daí o corte em `ClientViewStatic`
+(id, settings, board — vai uma vez, no snapshot) e `ClientViewDynamic`. O log
+fica fora das duas metades porque só cresce, e por acréscimo: os eventos do patch
+já vêm projetados, então concatenar é exato. `toClientView` virou a composição
+das duas metades, de modo que campo novo sem lugar numa delas para de compilar —
+a fronteira de §4.5 continua sendo uma função só.
+
+**Enumerar jogadas no cliente seria errado, não só duplicado.** `isLegal` de
+`tradeConfirm` confere se o _parceiro_ tem os recursos, e é exatamente isso que
+`toClientView` apaga. Um enumerador sobre a projeção responderia com menos
+informação do que a pergunta exige. A lista sai do servidor, dentro das mensagens
+que já existem — evento separado seria uma lista chegando desacompanhada da
+versão a que pertence, o mesmo erro pelo qual `game:event` foi cortado.
+
+Das propostas de comércio vai **uma** amostra, não a lista inteira: o botão de
+propor precisa existir antes da proposta, mas um menu de vinte trocas 1:1 é
+interface pior do que compor os termos, e são ~1,5 KB por patch por jogador que
+ninguém vai clicar. Quem decide se dá para propor continua sendo `isLegal`.
+
+#### Como ficou
+
+**Nenhum componente do tabuleiro, da HUD ou dos modais mudou.** Era a aposta da
+Fase 3, e ela pagou: `jogo` sumiu do store, `mesa` passou a vir do
+`state:snapshot`, `executar` manda comando em vez de chamar `reduce`, e a
+interface não percebeu. O aceite da Fase 3 continua verde sem uma asserção
+alterada — é essa a prova de que a troca foi de origem, não de interface.
+
+**`ativo` continua sendo "quem a mesa espera", nos dois modos.** A tentação era
+dizer "em rede, sou eu"; isso quebraria a faixa (passaria a dizer sempre o meu
+nome) e o destaque no painel de adversários. `activePlayers` aceita `TurnScope`,
+que `ClientView` satisfaz, então a derivação é a mesma. Quem responde "posso agir
+agora?" é `legais.length > 0`, que já cobre o descarte paralelo.
+
+**Os modais fecham por jogada minha, não por versão.** No hot-seat as duas
+contagens andavam juntas. Em rede, `mesa.version` anda a cada jogada de cada
+adversário — e o compositor de troca fecharia no meio da digitação toda vez que
+alguém do outro lado colocasse uma estrada.
+
+**`game:error` não é assinado.** O ack é a resposta autoritativa, e dois caminhos
+para o mesmo alerta é o jogador ver duas vezes o que aconteceu uma vez. O evento
+continua sendo emitido pelo servidor e passa a ser candidato a sair do contrato,
+como `game:event` saiu.
+
+**Os stores deixaram de ser singletons de módulo.** Vivem num `Cliente` entregue
+por contexto, com o padrão como reserva — o que mantém `<App/>` montável cru.
+Sem isso, os três jogadores do aceite seriam a mesma tela e a mesma identidade.
+
+**`socket.auth` é mutado no `session:issued`.** Sem isso o handshake da primeira
+reconexão vai sem token, o servidor emite identidade nova, e o assento fica para
+trás. É a falha mais silenciosa da fase: só aparece depois de uma queda.
+
+#### Dívida assumida ao fechar a fase
+
+| Pendência                                                             | Onde                                  | Quando                                                               |
+| --------------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| E2E em navegador de verdade — o aceite é jsdom com sockets reais      | `apps/web/test/multijogador.test.tsx` | Fase 6, junto do deploy, onde há URL pública para apontar            |
+| Layout, toque e a diferença entre o WebSocket do jsdom e o do Chrome  | —                                     | idem                                                                 |
+| `game:error` declarado e não consumido: o ack é a autoridade          | `SERVER_EVENTS`                       | sai do contrato na Fase 5, como saiu o `game:event`                  |
+| Escape fecha o modal de todas as telas montadas (ouvinte em `window`) | `apps/web/src/hud/Modal.tsx`          | só afeta o teste multijogador; some se o ouvinte descer para o modal |
+| Snapshot de partida longa carrega o log inteiro                       | `toClientView`                        | Fase 5, se a reconexão pesar                                         |
+| Sem link de convite (`/sala/ABC234`): entra-se digitando o código     | `apps/web/src/telas/Entrada.tsx`      | Fase 5, se houver roteador por outro motivo                          |
+| Chat na sala (`chat:*` no contrato, sem handler)                      | `packages/protocol`                   | Fase 5, como o roadmap prevê                                         |
+| Expiração de salas (30 min / 24 h do ADR-003)                         | `Room.lastActivityAt`                 | herdada da Fase 2, sem mudança                                       |
+| `game_results` de §7 não criada                                       | `src/persistence/schema.ts`           | Fase 5, com a tela de fim de jogo                                    |
+
+### Fase 5 — Polimento (2 semanas) ✅
+
+Como na Fase 2, os sub-marcos abaixo são a ordem de entrega, e aparecem nas
+mensagens de commit. A ordem não é a da lista original: o que mexe na **fronteira
+de segurança** vai primeiro, enquanto há fase inteira pela frente para o erro
+aparecer.
+
+- [x] **M1** — Tela de fim de partida com placar detalhado — `apps/web/src/hud/FimDePartida.tsx`, `finalScores` em `packages/rules/src/view.ts`, tabela `game_results` de §7
+- [x] **M2** — Responsividade (tablet e celular em paisagem) — `apps/web/src/telas/Partida.tsx`, `src/hud/PainelLateral.tsx`
+- [x] **M3** — Acessibilidade: navegação por teclado, contraste, rótulos ARIA no SVG, paleta segura para daltônicos — `apps/web/src/board/{Marca,descricoes,CamadaInterativa}.tsx`, `src/hud/Modal.tsx`
+- [x] **M4** — Chat na sala — `apps/server/src/protocol/chat.ts`, `apps/web/src/estado/chat.ts`, `src/hud/Chat.tsx`
+- [x] **M5** — Timer de turno configurável + auto-passe do turno em AFK — `apps/server/src/game/timer.ts`, `apps/web/src/hud/Cronometro.tsx`
+- [x] **M6** — Feedback sonoro e animações de transição — `apps/web/src/som/`, `src/board/movimento.ts`
+- [x] **M7** — i18n (pt-BR no MVP, estrutura pronta para en) — `packages/rules/src/narracao/pt-BR.ts`, `apps/web/src/i18n/pt-BR.ts`
+- **Aceite:** ⏳ **pendente** — heurística de usabilidade com 4 jogadores sem precisar de explicação prévia da interface. É playtest com pessoas (nível 5 da §8), e nenhum teste desta suíte pode substituí-lo. Os sete marcos estão entregues e verdes; o aceite é a próxima coisa a acontecer.
+
+#### Decisões tomadas ao abrir a fase
+
+| Questão                     | Decisão                                                                       |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| Timer de turno (§11, q. 5)  | **opcional por sala, desligado por padrão** — fecha a questão 5 em aberto     |
+| Profundidade do i18n        | extração mínima, uma língua: estrutura pronta para `en` **sem escrever `en`** |
+| Feedback sonoro             | WebAudio sintetizado, sem arquivos de áudio no repositório (§2, licenças)     |
+| Paleta segura p/ daltônicos | marca por **forma** sempre visível, e não um modo alternativo a manter em par |
+
+#### M1 — o placar é uma mudança na fronteira, não uma tela
+
+O placar detalhado exige revelar as cartas de Ponto de Vitória alheias. É a
+**única** mudança desta fase na fronteira de §4.5, e foi tratada como tal.
+
+`ClientView` ganhou `finalScores`, preenchido só quando `state.winner !== null`.
+A condição é `winner` e não `phase === 'finished'` porque é `winner` que o resto
+da projeção já usa para dizer que acabou — duas condições para o mesmo fato são
+duas chances de uma delas mudar sozinha. O campo entrou em `ClientViewDynamic`,
+então o `state:patch` da própria jogada da vitória já o carrega, e a composição de
+`toClientView` faz o compilador exigir isso.
+
+**O teste cobre os dois lados, e busca por forma em vez de por valor.** Um teste
+que só prova "não vaza antes" passa mesmo se o placar nunca aparecer; um que só
+prova "aparece depois" passa mesmo se aparecer o tempo todo. E a varredura por
+sentinela numérica — que funciona para mão de recursos — não serve aqui: um total
+de PV é um inteiro pequeno que aparece legitimamente às centenas no JSON do
+tabuleiro. A varredura procura por um **objeto com a assinatura de
+`VictoryBreakdown`**, o que continua valendo se alguém publicar a mesma coisa por
+um campo de outro nome.
+
+`scoreboard()` nasceu em `scoring/victory.ts` porque dois lugares precisam do
+mesmo placar: a projeção e o `game_results`. O banco e a tela discordarem sobre
+uma partida que já acabou seria divergência descoberta meses depois, sem ninguém
+para reproduzi-la.
+
+**A partida encerrada agora encerra a sala.** `restore()` só ressuscita o que está
+em `playing`; sem `RoomRegistry.finish()`, uma partida decidida voltaria viva no
+próximo reinício, com vencedor e sem ninguém para jogar. E o snapshot final passou
+a ser gravado também na vitória: vencer não passa por `turnEnded`, então o último
+snapshot era o do turno anterior.
+
+`duration_s` conta a partir da instância do `GameRoom`. Uma partida que atravessou
+um reinício conta do reinício — aproximação assumida: o número existe para alguém
+olhar depois, e o instante exato de início custaria uma coluna e uma migração para
+uma estatística que ninguém audita.
+
+**`game:error` saiu do contrato**, como a dívida da Fase 4 previa e pelo mesmo
+raciocínio que aposentou o `game:event`: o `ack` é a resposta autoritativa, e o
+cliente nunca assinou o evento. O teste que o cobria virou um que vigia o que
+importa — que a recusa **não** emita evento nenhum, para ninguém (`onAny`), e que
+o reenvio devolva a mesma recusa verbatim.
+
+#### M2 — o eixo estava errado, não o valor
+
+A quebra não era "o ponto de corte devia ser outro". `Partida.tsx` decidia entre
+empilhar e pôr lado a lado em `lg:` — **1024px de largura** — e um celular
+deitado tem 844px. Ou seja: o aparelho onde a lateral mais faz falta, porque
+empilhar em 390px de altura deixa o tabuleiro com uma faixa, era justamente o que
+caía no empilhamento. Quem decide se as duas coisas cabem lado a lado é a
+**orientação**, e a regra virou `landscape:flex-row`.
+
+Três consequências que vieram junto:
+
+- a coluna ganhou `overflow-y-auto` **nela mesma**, e não só no histórico: em
+  390px de altura ela inteira não cabe, e sem isso o que sobra sai da tela em vez
+  de rolar;
+- em retrato a coluna é **recolhível** e nunca passa de 45% da altura. Numa tela
+  alta e estreita o tabuleiro quer a tela toda, e a informação vem quando pedida.
+  Recolhida, ela some por CSS e continua montada — desmontar perderia a rolagem
+  do histórico, e em paisagem, onde a regra não vale, ela precisa estar lá de
+  qualquer jeito;
+- `Entrada` e `Sala` ganharam `overflow-y-auto` com `my-auto` no cartão. Os dois
+  são mais altos que um celular deitado, e `items-center` sozinho **corta o topo**
+  em vez de deixar rolar até ele.
+
+**O que dá para testar aqui, e o que não dá.** O jsdom não faz layout e não
+avalia `@media (orientation: …)`, então nenhum teste desta suíte olha para um
+pixel. O que os testes cobrem é o que sobra sem CSS: o controle existe, anuncia
+o estado por `aria-expanded`, e o `aria-controls` aponta para um elemento que
+existe de verdade — o defeito clássico deste padrão, invisível na tela e fatal no
+leitor de tela.
+
+A verificação de que as regras **existem** é o build: as seis classes de
+orientação foram conferidas no CSS gerado, porque o Tailwind descarta em silêncio
+uma variante que ele não conhece, e um `landscape:` digitado errado não daria
+erro em lugar nenhum — só não funcionaria.
+
+**Falta a confirmação visual no navegador**, em 390×844 retrato, 844×390 paisagem
+e 1024×768. Nenhum teste desta suíte pode dá-la.
+
+#### M4 — o chat é o único broadcast de sala que existe no servidor
+
+O contrato já tinha tudo: `chat:send` na §5.1, `chat:message` na §5.2 com payload
+declarado. Faltava o handler, desde a Fase 2. Nada foi inventado no protocolo —
+só uma correção: `text` ganhou `.trim()` **antes** do `.min(1)`, porque uma
+mensagem só de espaços não é mensagem, e um Enter distraído virava linha em
+branco no histórico de todo mundo.
+
+`protocol/game.ts` avisa em letras grandes que estado de partida **nunca** sai por
+`io.to(code)`: cada jogador vê uma partida diferente. Chat é o caso oposto e o
+único do servidor — a mensagem é a mesma para todos por definição, e não há nada
+a filtrar. Vale a pena que o único broadcast do sistema esteja documentado como
+exceção consciente, e não como descuido que sobreviveu.
+
+O apelido sai do **assento**, não do `PlayerDirectory`: é o nome com que a pessoa
+entrou _naquela_ sala, e é o que os outros estão lendo no tabuleiro. Mesmo
+cuidado que a restauração de salas já documentava.
+
+**Sem eco otimista.** A mensagem entra na lista quando o servidor a devolve, não
+quando o campo é enviado — mesma escolha do `driverDeRede` para jogadas, pelo
+mesmo motivo: uma linha que aparece e some porque a recusa chegou depois é pior
+que uma que demora um piscar a aparecer.
+
+**Sem persistência**, e isto é decisão: §7 não tem tabela de chat e não ganhou
+uma. Quem entra depois não vê o que passou. Guardar conversa significa decidir
+por quanto tempo, quem pode lê-la no replay e o que acontece quando a sala morre
+— e nada disso é problema do MVP. O histórico tem teto de 200 mensagens na aba,
+porque memória de navegador também acaba.
+
+O limite de ritmo saiu de graça: por passar pelo `handle`, quem inunda o chat
+gasta o mesmo balde que precisa para jogar.
+
+#### M3 — nada num `<circle>` é botão de graça
+
+Os alvos do tabuleiro são `<circle>` e `<polygon>`. Foco, Enter, Espaço e rótulo
+são **todos** código deste repositório — nenhum vem do navegador. Cada alvo legal
+virou `role="button"` com `tabIndex={0}`, e o `preventDefault` no Espaço é a parte
+que se esquece de escrever: sem ele o Espaço rola a página, porque um `<circle>`
+não tem o comportamento que o `role` promete.
+
+**O rótulo diz onde.** `vertexId` é `"q,r|q,r|q,r"` — ótimo identificador, péssima
+descrição. `descricoes.ts` monta o lugar a partir dos hexágonos em volta
+("Construir estrada entre Floresta 11 e Colina 6"), que é como uma pessoa aponta
+um lugar para outra na mesa. A ordem de foco sai de `vertexOrder`/`edgeOrder`, que
+o motor já produz de forma determinística — inventar uma ordenação aqui só criaria
+uma segunda maneira de percorrer a mesma coisa.
+
+**Marca por forma, sempre ligada.** Seis matizes distinguíveis por todos os tipos
+de daltonismo é apertado; seis que **também** se separem dos seis terrenos e do
+mar não existe. Então cor deixou de ser o único sinal: cada jogador tem uma forma
+própria desenhada dentro das construções, e um padrão de traço próprio nas
+estradas — numa linha de poucos pixels não cabe símbolo, e o que distingue linha
+de linha é o tracejado. As duas coisas moram ao lado de `COR_DO_JOGADOR`, para que
+uma cor nova sem marca doa num lugar só. A mesma marca se repete em toda lista de
+jogadores, o que de quebra resolve "de quem é aquela estrada?" para quem enxerga
+cor perfeitamente bem.
+
+O tracejado vai **só no traço de cima**: por baixo a linha escura continua sólida,
+senão o terreno apareceria pelos vãos justamente onde o contraste já é pior.
+
+**O Escape desceu de `window` para o diálogo**, fechando a dívida da Fase 4. Era o
+mesmo defeito por dois motivos: com três `<App/>` num documento, um Escape fechava
+o modal de todas as telas; e um diálogo que ouve a janela é um diálogo que não é
+dono do próprio comportamento. Com ele desceu o resto — o foco entra ao abrir,
+volta ao fechar, e o Tab circula dentro. Sem isso, quem navega por teclado abre o
+descarte e continua tabulando pelos vértices que o fundo escuro diz que não dá
+para clicar.
+
+**Contraste:** `text-white/50` media ~4,2:1 contra o fundo dos painéis, abaixo do
+piso de 4,5:1 — e era usado justamente nos textos menores da tela. Foi para `/70`
+em seis lugares. O travessão de "zero ponto" do placar estava em ~2,2:1.
+
+**Os `aria-label` das cores estavam em inglês.** `PlayerColor` é `'red' | 'blue'`
+porque identificador de domínio não se traduz, mas o seletor de cor mandava isso
+cru para o leitor de tela, que soletrava em inglês no meio de uma frase em
+português.
+
+**O que o teste prova, e o que não pode provar.** Um robô joga uma partida inteira
+com o tabuleiro dirigido **só pelo teclado** — foco e Enter, sem clique em
+coordenada — e o teste exige um piso de acionamentos por tecla, senão uma partida
+feita só de cliques em botão passaria sem provar nada. Os botões nativos continuam
+sendo acionados por clique de propósito: num `<button>` de verdade, quem
+transforma Enter em clique é o navegador, o jsdom não implementa isso, e um teste
+dessa parte estaria testando o jsdom.
+
+#### M5 — o relógio existe para o abandono, não para a pressa
+
+Fecha a **§11, questão 5**: opcional por sala, e **desligado por padrão**. Partida
+entre amigos raramente quer cronômetro, e ligá-lo sem pedir apressaria quem só
+estava pensando. O caso real que ele resolve é outro: alguém fecha a aba no meio
+do próprio turno e os outros três ficam olhando para uma mesa que não anda.
+
+**O motor não sabe que isto existe.** `packages/rules` não pode ler o relógio, e é
+regra de lint verificada no CI. Então nada aqui virou ação nova nem campo novo no
+estado: ao estourar o prazo, o servidor **submete uma jogada legal** pelo mesmo
+`GameRoom.submit` de todo mundo. `aplicarJogada` nasceu justamente para isso — o
+auto-passe e o comando de socket percorrem a mesma função, a mesma fila, a mesma
+idempotência, a mesma persistência e a mesma emissão. Um atalho seria uma segunda
+maneira de a partida andar, e as duas divergiriam no primeiro detalhe que só uma
+passasse a tratar. De quebra, o log de ações continua reproduzindo a partida
+inteira, auto-passes incluídos.
+
+`turnSeconds` **não entra no `GameSettings`**. `ajustesDoMotor()` filtra o que vai
+para o `createGame`, senão um ajuste de servidor viajaria no `state.settings`, no
+snapshot JSONB e na `ClientView` — três lugares onde ele não tem o que fazer.
+
+**Quem a mesa espera é `activePlayers`**, e não `currentPlayerIndex`. A função já
+existia desde a Fase 1 e já acertava os dois casos que um relógio ingênuo erra: o
+**descarte paralelo**, em que vários agem ao mesmo tempo, e a **proposta de troca
+aberta**, em que quem trava a mesa não é o jogador da vez.
+
+**O prazo é da mesa, não do jogador.** Uma jogada de qualquer um zera o relógio de
+todos — no descarte paralelo todo mundo começou a contar na mesma rolagem, e não
+há razão para uns terem mais tempo que outros.
+
+**O que se joga por quem não jogou** é "o mínimo que destrava, e o menos
+prejudicial possível": rolar primeiro, porque é obrigatório e não é escolha;
+descarte e Saqueador porque a mesa não anda sem; e `endTurn` por padrão, porque na
+fase principal **não fazer nada** é a jogada menos prejudicial que existe —
+construir ou comprar gastaria os recursos de quem está ausente. A proposta de
+troca é recusada, que é o que uma pessoa ausente faz.
+
+**Prazo como instante absoluto**, não como "faltam 40 segundos". Mandar o restante
+e deixar o navegador decrementar diverge no primeiro atraso de rede, e a
+divergência cresce a cada patch; com o instante, cada cliente subtrai do próprio
+relógio e o erro não se acumula. Viaja dentro do snapshot e do patch, e não num
+evento próprio — mesmo raciocínio que aposentou o `game:event` e o `game:error`.
+
+**Varredura de um em um segundo, e não `setTimeout` por sala.** Um `setTimeout`
+precisaria ser cancelado e recriado a cada jogada — são centenas por partida — e
+um esquecido dispara sobre um estado que já mudou. Com um prazo guardado e uma
+varredura, o estado é conferido no instante da decisão, e o teste chama `tick()`
+com o relógio que quiser em vez de esperar de verdade.
+
+#### M6 — som sem arquivo, e movimento que se pode recusar
+
+Os sons saem de osciladores do WebAudio. Nenhum arquivo de áudio entrou no
+repositório, por três razões que valem mais do que timbres bonitos: **§2** (áudio
+de terceiro traz licença para conferir), **bytes** (o `dist` já passa de 600 kB, e
+meia dúzia de amostras dobraria isso por um efeito de meio segundo) e **teste**
+(sem carregamento assíncrono não há o que esperar nem o que simular).
+
+**Sem `AudioContext`, tudo vira função vazia** — é o que faz a suíte inteira
+passar sem um único mock, e o que protege quem abre num navegador antigo. O
+módulo também nunca lança: falha ao tocar um som não pode derrubar a partida de
+quatro pessoas.
+
+**Mudo por padrão**, e não só por educação: navegador nenhum deixa tocar áudio
+antes de um gesto, então "ligado por padrão" seria na prática "silencioso até
+alguém clicar em alguma coisa" — a promessa e o comportamento já nasceriam
+diferentes. O botão de som **é** o gesto, e toca uma nota ao ligar para confirmar
+a escolha e despertar o contexto no mesmo movimento.
+
+**O gatilho é o log projetado que já chega no patch.** Nenhum componente ganhou
+uma linha de "e toque isto aqui": som novo se acrescenta a uma tabela. Um som por
+leva, e não por evento — uma rolagem de produção emite um evento por jogador, e
+três "construir" empilhados viram ruído. E a primeira leitura não toca nada: quem
+reconecta no turno quarenta recebe o log inteiro de uma vez, e quarenta turnos de
+som seria a pior recepção possível.
+
+**`prefers-reduced-motion` em dois lugares, porque um não basta.** A regra global
+do CSS encurta transições e `@keyframes`, mas **não alcança o `<animate>` do
+SVG** — SMIL não é CSS, e nenhuma media query o desliga. O pulso dos alvos legais
+é justamente um `<animate>`, e é a animação mais insistente da tela: repete
+indefinidamente, em dezenas de pontos ao mesmo tempo. Quem pede menos movimento
+costuma ter um motivo de saúde, e "quase tudo respeita a preferência" não serve.
+
+**O Saqueador passou a ser posicionado por `transform`**, e não com as coordenadas
+embutidas em cada forma. É o que permite ao CSS animá-lo: redesenhá-lo em
+coordenadas novas o faria teleportar, e ele realmente se moveu — vale mostrar
+para onde.
+
+#### M7 — extração, e a prova de que ela não mexeu em nada
+
+Duas lacunas de verdade, e só duas. Os `Record<K, string>` de `labels.ts` e o
+`ROOM_ERROR_LABELS` do `protocol` **já eram** a estrutura certa — código novo sem
+rótulo não compila, e é isso que impede um pacote de idioma de apodrecer. Não
+foram tocados.
+
+O que estava solto: as **23 frases** do histórico, dentro de um `switch` em
+`narrate.ts`, e o texto da interface, espalhado pelo JSX.
+
+As frases foram para `narracao/pt-BR.ts` como um `Record` sobre
+`GameEvent['type']` — mesma garantia de exaustividade dos rótulos: evento novo
+sem frase não compila. `describeEvent` passou a despachar pelo pacote, e
+`NarrationOptions` ganhou um campo `narracao` por onde um segundo idioma entraria
+sem tocar na função.
+
+**A prova de que a extração não mudou texto são os testes que não mudaram.**
+`narrate.test.ts` narra o log inteiro de quatro partidas de verdade, e
+`labels.test.ts` cobre os mapas; os 35 casos passaram sem uma asserção alterada.
+O mesmo vale para a suíte web, cheia de `getByRole({ name: 'Criar sala' })` e
+`toHaveTextContent`: 153 casos, nenhuma asserção tocada.
+
+`apps/web/src/i18n/pt-BR.ts` ficou com o texto **da interface** — e só ele. O
+vocabulário do jogo continua no motor, porque a CLI também o usa e `apps/` é o
+que `packages/` não pode importar. São quatro donos, um por assunto, e a tabela
+no cabeçalho daquele arquivo diz qual é qual. Ao fim, **nenhuma string solta
+sobrou no JSX**.
+
+É um módulo, e não um contexto: com um idioma só, importar `t` basta e não custa
+nem uma re-renderização. O dia em que houver um segundo, `t` vira um hook e só as
+importações mudam — nenhum texto volta para dentro dos componentes. É esse o
+sentido de "pronto para `en`" sem escrever `en`.
+
+#### O defeito que só apareceu jogando
+
+Fechados os sete marcos, a primeira tentativa de abrir o cliente encontrou o que
+nenhum teste tinha encontrado: `make web` sem `make dev` ao lado deixava a pessoa
+olhando para **"Reconectando…"** para sempre — uma reconexão que nunca ia
+acontecer, para uma conexão que nunca existiu. O único sinal concreto vinha dez
+segundos depois de um clique, pelo timeout de ack, dizendo que o servidor "não
+respondeu".
+
+Duas causas, as duas em `rede/conexao.ts`:
+
+- **`connect_error` não era ouvido.** Quem nunca conectava ficava em `'ligando'`
+  enquanto o socket.io tentava em silêncio;
+- **`fechar()` não marcava o estado.** O `disconnect` só dispara em socket que
+  chegou a conectar, então fechar um que ainda tentava deixava o estado dizendo
+  que havia tentativa em curso depois de alguém ter pedido para parar.
+
+`EstadoDaConexao` ganhou `'inacessivel'`, que separa "nunca conectei" de "caí". A
+distinção não é cosmética: são situações com causas e saídas diferentes — quem
+cai no meio de uma partida espera voltar e continuar; quem abre a página com o
+servidor fora do ar precisa saber que não há servidor. A faixa passou a ter uma
+mensagem por estado em vez de um binário, e em desenvolvimento diz o que fazer
+(`make dev`) em vez de só constatar.
+
+De quebra, comando enviado com o servidor sabidamente ausente falha **na hora**,
+em vez de esperar os dez segundos do ack. Só nesse caso: em `'reconectando'` o
+comando continua indo para a fila do socket.io de propósito, que é o que faz um
+clique dado durante uma queda não se perder.
+
+**Por que a suíte não pegou.** Todo teste que toca a rede sobe o servidor
+**antes** do cliente — é o que o aceite da Fase 4 faz. O caminho do servidor
+ausente não era exercitado por ninguém. Agora é: `apps/web/test/conexao.test.ts`
+aponta para uma porta fechada de propósito, e o primeiro caso é literalmente o
+`await` que antes nunca terminava.
+
+É um lembrete do que a §8 já dizia ao listar o playtest como nível 5: as camadas
+de teste pegam o que alguém pensou em testar, e o aceite desta fase existe porque
+isso não é tudo.
+
+#### Dívida assumida ao fechar a fase
+
+| Pendência                                                            | Onde                                    | Quando                                                     |
+| -------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------- |
+| **Aceite da fase**: playtest de usabilidade com 4 pessoas            | —                                       | próxima sessão; nenhum teste o substitui                   |
+| Layout responsivo **não foi conferido em navegador**                 | `apps/web/src/telas/Partida.tsx`        | antes do playtest: jsdom não faz layout                    |
+| Timbres dos sons nunca foram ouvidos                                 | `apps/web/src/som/sintese.ts`           | idem — som não se verifica por asserção                    |
+| E2E em navegador de verdade (Playwright)                             | `apps/web/test/multijogador.test.tsx`   | Fase 6, onde há URL pública para apontar                   |
+| Chat sem persistência: quem entra depois não vê o que passou         | `apps/server/src/protocol/chat.ts`      | decisão, não pendência — reabrir só se alguém sentir falta |
+| `duration_s` conta do reinício numa partida que atravessou um deploy | `apps/server/src/game/room.ts`          | aproximação assumida; é estatística, não contabilidade     |
+| Snapshot de partida longa carrega o log inteiro                      | `toClientView`                          | medir antes de otimizar                                    |
+| Link de convite (`/sala/ABC234`)                                     | `apps/web/src/telas/Entrada.tsx`        | não coube na M2; cabe barato via `location.hash`           |
+| Expiração de salas (30 min / 24 h do ADR-003)                        | `Room.lastActivityAt`                   | Fase 6 — é operação, não interface                         |
+| Limite por IP                                                        | —                                       | Fase 6, junto do proxy                                     |
+| Adapter Redis do Socket.IO                                           | `src/protocol/types.ts`                 | só ao escalar para mais de um nó                           |
+| Nenhum pacote `en` escrito                                           | `apps/web/src/i18n/`, `rules/narracao/` | quando alguém pedir para jogar em inglês                   |
+
+#### O que a Fase 5 fechou de dívida antiga
+
+| Pendência                                         | Vinha da |
+| ------------------------------------------------- | -------- |
+| `game_results` de §7 não criada                   | Fase 2   |
+| Chat na sala (`chat:*` no contrato, sem handler)  | Fase 2   |
+| `game:error` declarado e não consumido            | Fase 4   |
+| Escape fechava o modal de todas as telas montadas | Fase 4   |
+| Sem navegação por teclado nos alvos do tabuleiro  | Fase 3   |
+| Tela de fim de partida era uma faixa, sem placar  | Fase 3   |
+| Responsividade só até "não quebra em uma coluna"  | Fase 3   |
+| §11, questão 5 (timer de turno) em aberto         | Fase 0   |
 
 ### Fase 6 — Produção (1 semana)
 
@@ -666,7 +1201,7 @@ Definir antes do início da Fase 0:
 2. **Colyseus vs Socket.IO puro:** vale um spike de 1 dia na Fase 0.
 3. **Nome e identidade visual do jogo.**
 4. **Hospedagem:** VPS gerenciado manualmente (mais barato, mais trabalho) vs PaaS tipo Fly.io/Railway (mais caro, deploy trivial).
-5. **Timer de turno:** obrigatório ou opcional por sala?
+5. ~~**Timer de turno:** obrigatório ou opcional por sala?~~ → **opcional por sala, desligado por padrão** (Fase 5, M5)
 6. **Persistência de partidas abandonadas:** por quanto tempo uma sala inativa sobrevive antes de ser encerrada?
 
 ---

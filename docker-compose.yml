@@ -24,8 +24,11 @@ services:
       - nm-rules:/workspace/packages/rules/node_modules
       - nm-cli:/workspace/apps/cli/node_modules
       - nm-server:/workspace/apps/server/node_modules
+      - nm-web:/workspace/apps/web/node_modules
     ports:
       - '3000:3000'
+      # Vite do cliente (Fase 3). `CORS_ORIGIN` do servidor já previa esta porta.
+      - '5173:5173'
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,3 +67,4 @@ volumes:
   nm-rules:
   nm-cli:
   nm-server:
+  nm-web:

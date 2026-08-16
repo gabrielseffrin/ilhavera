@@ -15,7 +15,7 @@ import { reduce } from '../../src/reduce.js';
 import { enumerateLegalActions } from '../../src/legal.js';
 import { randomInt } from '../../src/rng.js';
 import type { Action, ActionType } from '../../src/actions/types.js';
-import type { GameState } from '../../src/state.js';
+import type { GameEvent, GameState } from '../../src/state.js';
 import type { PlayerColor, PlayerId } from '../../src/types.js';
 
 /**
@@ -45,7 +45,12 @@ const DEFAULT_WEIGHT = 20;
 
 const COLORS: PlayerColor[] = ['red', 'blue', 'white', 'orange'];
 
-export type StepHook = (context: { state: GameState; action: Action; step: number }) => void;
+export type StepHook = (context: {
+  state: GameState;
+  action: Action;
+  events: readonly GameEvent[];
+  step: number;
+}) => void;
 
 export type PlayOptions = {
   playerCount?: number;
@@ -112,7 +117,7 @@ export function playRandomGame(seed: string, options: PlayOptions = {}): PlayRes
     state = result.state;
     actions.push(choice.action);
     step++;
-    options.onStep?.({ state, action: choice.action, step });
+    options.onStep?.({ state, action: choice.action, events: result.events, step });
   }
 
   return { state, actions, steps: step, finished: state.phase === 'finished' };

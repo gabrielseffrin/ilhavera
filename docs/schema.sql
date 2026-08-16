@@ -1,7 +1,14 @@
 -- Modelo de dados — §7 do roadmap.
 --
--- Escrito aqui na Fase 1 para virar migração Drizzle na Fase 2. Nada disto é
--- aplicado ainda: o motor de regras é puro e não conhece banco de dados.
+-- ATENÇÃO: este arquivo virou referência histórica na M5. A fonte da verdade
+-- agora é `apps/server/src/persistence/schema.ts`, de onde sai a migração em
+-- `apps/server/drizzle/`. Duas diferenças em relação ao que está abaixo:
+--
+--   * `game_results` entrou na Fase 5, junto da tela de fim de partida que a
+--     justifica. `scores` guarda a decomposição de TODOS os jogadores, e não só
+--     a do vencedor;
+--   * `game_actions` ganhou índice em (room_id, seq), que é como a restauração
+--     lê.
 --
 -- Estratégia de persistência (§7): a partida vive EM MEMÓRIA no processo do
 -- servidor, que é a fonte de verdade em runtime. O snapshot é gravado ao fim de
