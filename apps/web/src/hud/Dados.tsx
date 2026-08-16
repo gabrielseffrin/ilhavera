@@ -14,6 +14,7 @@
 import { useEffect, useState } from 'react';
 
 import type { ClientView } from '@ilhavera/rules';
+import { t } from '../i18n/pt-BR.js';
 
 export type DadosProps = {
   roll: ClientView['lastRoll'];
@@ -41,10 +42,10 @@ export function Dados({ roll, chave }: DadosProps): React.JSX.Element {
       data-total={roll?.total ?? ''}
       className="flex items-center gap-2 rounded-xl bg-slate-900/70 p-3 text-sm text-white"
     >
-      <h2 className="font-semibold">Dados</h2>
+      <h2 className="font-semibold">{t.dados.titulo}</h2>
 
       {roll === null ? (
-        <span className="text-white/50">— ainda não rolou neste turno</span>
+        <span className="text-white/70">{t.dados.aindaNaoRolou}</span>
       ) : (
         <span className={`flex items-center gap-2 ${animando ? 'animate-pulse' : ''}`}>
           <Face valor={roll.dice[0]} />

@@ -3,6 +3,11 @@
  *
  * Desenhadas por cima do terreno e por baixo da camada interativa — clique é
  * assunto de quem sabe o que é legal, não das peças.
+ *
+ * **Cor não é o único sinal.** Cada construção leva a marca do dono desenhada
+ * dentro, e cada estrada, o padrão de traço dele. `red` e `green` são a dupla
+ * clássica da deuteranopia, e uma partida em que não se distingue de quem é a
+ * estrada não é jogável — ver `MARCA_DO_JOGADOR` em `cores.ts`.
  */
 
 import {
@@ -13,7 +18,8 @@ import {
   type Road,
 } from '@ilhavera/rules';
 
-import { CONTORNO_DO_JOGADOR, COR_DO_JOGADOR } from './cores.js';
+import { CONTORNO_DO_JOGADOR, COR_DO_JOGADOR, MARCA_DO_JOGADOR, tracejado } from './cores.js';
+import { Marca } from './Marca.js';
 import type { PlayerColor } from '@ilhavera/rules';
 
 export type PecasProps = {
@@ -50,6 +56,9 @@ export function Pecas({ board, buildings, roads, cores }: PecasProps): React.JSX
               strokeWidth={HEX_SIZE * 0.19}
               strokeLinecap="round"
             />
+            {/* O tracejado vai só no traço de cima: por baixo, a linha escura
+                continua sólida, senão o terreno apareceria pelos vãos e a
+                estrada ficaria ilegível justamente onde o contraste é pior. */}
             <line
               x1={pa.x}
               y1={pa.y}
@@ -57,7 +66,8 @@ export function Pecas({ board, buildings, roads, cores }: PecasProps): React.JSX
               y2={pb.y}
               stroke={COR_DO_JOGADOR[cor]}
               strokeWidth={HEX_SIZE * 0.12}
-              strokeLinecap="round"
+              strokeLinecap="butt"
+              strokeDasharray={tracejado(cor, HEX_SIZE * 0.12)}
             />
           </g>
         );
@@ -99,14 +109,23 @@ function Assentamento({ id, x, y, cor, dono }: PecaProps): React.JSX.Element {
   const l = HEX_SIZE * 0.17;
 
   return (
-    <polygon
-      data-assentamento={id}
-      data-dono={dono}
-      points={`${x - l},${y + l} ${x - l},${y - l * 0.2} ${x},${y - l} ${x + l},${y - l * 0.2} ${x + l},${y + l}`}
-      fill={COR_DO_JOGADOR[cor]}
-      stroke={CONTORNO_DO_JOGADOR[cor]}
-      strokeWidth={2}
-    />
+    <g data-assentamento={id} data-dono={dono} data-marca={MARCA_DO_JOGADOR[cor]}>
+      <polygon
+        points={`${x - l},${y + l} ${x - l},${y - l * 0.2} ${x},${y - l} ${x + l},${y - l * 0.2} ${x + l},${y + l}`}
+        fill={COR_DO_JOGADOR[cor]}
+        stroke={CONTORNO_DO_JOGADOR[cor]}
+        strokeWidth={2}
+      />
+      {/* Na cor do contorno, e não numa cor fixa: contra `white` um símbolo
+          branco some, e contra `brown` um preto também. */}
+      <Marca
+        marca={MARCA_DO_JOGADOR[cor]}
+        x={x}
+        y={y + l * 0.3}
+        r={l * 0.33}
+        cor={CONTORNO_DO_JOGADOR[cor]}
+      />
+    </g>
   );
 }
 
@@ -115,14 +134,21 @@ function Cidade({ id, x, y, cor, dono }: PecaProps): React.JSX.Element {
   const l = HEX_SIZE * 0.22;
 
   return (
-    <polygon
-      data-cidade={id}
-      data-dono={dono}
-      points={`${x - l},${y + l * 0.8} ${x - l},${y - l * 0.3} ${x - l * 0.3},${y - l * 0.9}
+    <g data-cidade={id} data-dono={dono} data-marca={MARCA_DO_JOGADOR[cor]}>
+      <polygon
+        points={`${x - l},${y + l * 0.8} ${x - l},${y - l * 0.3} ${x - l * 0.3},${y - l * 0.9}
                ${x + l * 0.35},${y - l * 0.3} ${x + l},${y - l * 0.3} ${x + l},${y + l * 0.8}`}
-      fill={COR_DO_JOGADOR[cor]}
-      stroke={CONTORNO_DO_JOGADOR[cor]}
-      strokeWidth={2}
-    />
+        fill={COR_DO_JOGADOR[cor]}
+        stroke={CONTORNO_DO_JOGADOR[cor]}
+        strokeWidth={2}
+      />
+      <Marca
+        marca={MARCA_DO_JOGADOR[cor]}
+        x={x}
+        y={y + l * 0.25}
+        r={l * 0.3}
+        cor={CONTORNO_DO_JOGADOR[cor]}
+      />
+    </g>
   );
 }

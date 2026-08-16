@@ -11,8 +11,8 @@
  * carta comprada no turno, dado ainda não rolado, evento sem ator.
  */
 
-import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createGame,
@@ -22,9 +22,11 @@ import {
   type GameState,
 } from '@ilhavera/rules';
 
+import { Cronometro } from '../src/hud/Cronometro.js';
 import { Dados } from '../src/hud/Dados.js';
 import { LogDeEventos } from '../src/hud/LogDeEventos.js';
 import { PainelDaMao } from '../src/hud/PainelDaMao.js';
+import { FimDePartida } from '../src/hud/FimDePartida.js';
 import { PainelDeAdversarios } from '../src/hud/PainelDeAdversarios.js';
 
 function partida(): GameState {
@@ -285,5 +287,147 @@ describe('LogDeEventos', () => {
 
     expect(linhas).toHaveLength(3);
     expect(linhas[2]).toHaveTextContent('Turno 11');
+  });
+});
+
+/**
+ * O placar final é o único painel que mostra o que a partida escondeu. O que se
+ * vigia aqui é o par: que ele **não** aparece antes da hora, e que quando
+ * aparece some do lado do motor — nenhum número desta tabela é somado aqui.
+ */
+describe('FimDePartida', () => {
+  /** Bruno com duas cartas de PV: os pontos que só o fim revela. */
+  function comPVOculto(jogo: GameState): GameState {
+    return {
+      ...jogo,
+      players: jogo.players.map((p) =>
+        p.id === 'bruno'
+          ? {
+              ...p,
+              devCards: [
+                { card: 'victoryPoint' as const, boughtOnTurn: 1, played: false },
+                { card: 'victoryPoint' as const, boughtOnTurn: 2, played: false },
+              ],
+            }
+          : p,
+      ),
+    };
+  }
+
+  it('não desenha nada enquanto a partida está em curso', () => {
+    const mesa = mesaDe(comPVOculto);
+
+    render(<FimDePartida mesa={mesa} />);
+
+    expect(mesa.finalScores).toBeNull();
+    expect(screen.queryByTestId('fim-de-partida')).not.toBeInTheDocument();
+  });
+
+  it('anuncia o vencedor e abre a decomposição de todos os jogadores', () => {
+    const mesa = mesaDe((jogo) => ({
+      ...comPVOculto(jogo),
+      winner: 'bruno',
+      phase: 'finished' as const,
+    }));
+
+    render(<FimDePartida mesa={mesa} />);
+    const painel = screen.getByTestId('fim-de-partida');
+
+    expect(painel).toHaveAttribute('data-vencedor', 'bruno');
+    expect(painel).toHaveTextContent('Bruno venceu com');
+    // Uma linha por jogador, e o total de cada uma vem de `finalScores`.
+    for (const p of mesa.players) {
+      const linha = painel.querySelector(`[data-jogador="${p.id}"]`);
+      expect(linha).toHaveAttribute('data-total', String(mesa.finalScores?.[p.id]?.total));
+    }
+  });
+
+  it('mostra as cartas de PV que estavam ocultas — e só depois do fim', () => {
+    const emCurso = mesaDe(comPVOculto);
+    const acabou = mesaDe((jogo) => ({
+      ...comPVOculto(jogo),
+      winner: 'bruno',
+      phase: 'finished' as const,
+    }));
+
+    // Durante a partida, Ana enxergava um Bruno com dois pontos a menos.
+    const publico = emCurso.players.find((p) => p.id === 'bruno')!.victoryPointsPublic;
+    expect(acabou.finalScores?.['bruno']?.devCards).toBe(2);
+    expect(acabou.finalScores?.['bruno']?.total).toBe(publico + 2);
+  });
+
+  it('classifica do maior para o menor, e não pela ordem dos assentos', () => {
+    const mesa = mesaDe((jogo) => ({
+      ...comPVOculto(jogo),
+      winner: 'bruno',
+      phase: 'finished' as const,
+    }));
+
+    render(<FimDePartida mesa={mesa} />);
+    const linhas = [...screen.getByTestId('fim-de-partida').querySelectorAll('tbody tr')];
+    const totais = linhas.map((l) => Number(l.getAttribute('data-total')));
+
+    expect(totais).toEqual([...totais].sort((a, b) => b - a));
+    expect(linhas[0]).toHaveAttribute('data-jogador', 'bruno');
+  });
+});
+
+/**
+ * O cronômetro.
+ *
+ * O que importa aqui é a subtração ser feita **no cliente, contra o instante que
+ * o servidor mandou**. Um componente que recebesse "faltam 40s" e decrementasse
+ * pareceria igual na tela e divergiria a cada atraso de rede.
+ */
+describe('Cronometro', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('não desenha nada quando a sala não tem relógio', () => {
+    render(<Cronometro prazo={null} />);
+    expect(screen.queryByTestId('cronometro')).not.toBeInTheDocument();
+  });
+
+  it('mostra o restante calculado a partir do instante recebido', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+
+    render(<Cronometro prazo={1_700_000_000_000 + 45_000} />);
+
+    expect(screen.getByTestId('cronometro')).toHaveAttribute('data-restante', '45');
+  });
+
+  it('anda com o relógio, sem decrementar um número guardado', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+    render(<Cronometro prazo={1_700_000_000_000 + 45_000} />);
+
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+
+    // 15, e não "45 menos os tiques que eu vi": o cálculo é sempre contra o
+    // relógio, então perder um tique não acumula erro.
+    expect(screen.getByTestId('cronometro')).toHaveAttribute('data-restante', '15');
+  });
+
+  it('não conta abaixo de zero', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+    render(<Cronometro prazo={1_700_000_000_000 - 5_000} />);
+
+    expect(screen.getByTestId('cronometro')).toHaveAttribute('data-restante', '0');
+  });
+
+  it('não se anuncia a cada segundo', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+    render(<Cronometro prazo={1_700_000_000_000 + 45_000} />);
+
+    // Um contador em `aria-live` deixa o leitor de tela inútil pelo resto do
+    // turno. Quem quiser saber consulta.
+    expect(screen.getByTestId('cronometro')).toHaveAttribute('aria-live', 'off');
+    expect(screen.getByTestId('cronometro')).toHaveAttribute('role', 'timer');
   });
 });

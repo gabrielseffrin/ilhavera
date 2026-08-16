@@ -4,9 +4,9 @@
 -- agora é `apps/server/src/persistence/schema.ts`, de onde sai a migração em
 -- `apps/server/drizzle/`. Duas diferenças em relação ao que está abaixo:
 --
---   * `game_results` não foi criada — guarda estatística de partida encerrada,
---     não faz parte de restaurar partida viva, e tabela sem quem a escreva é
---     peso morto. Entra com a tela de fim de jogo, na Fase 5;
+--   * `game_results` entrou na Fase 5, junto da tela de fim de partida que a
+--     justifica. `scores` guarda a decomposição de TODOS os jogadores, e não só
+--     a do vencedor;
 --   * `game_actions` ganhou índice em (room_id, seq), que é como a restauração
 --     lê.
 --

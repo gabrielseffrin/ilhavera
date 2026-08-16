@@ -17,7 +17,7 @@
  * da M3.
  */
 
-import type { Action, GameState, PlayerColor } from '@ilhavera/rules';
+import type { Action, GameState, PlayerColor, VictoryBreakdown } from '@ilhavera/rules';
 import type { RoomSettings } from '@ilhavera/protocol';
 
 export type StoredPlayer = {
@@ -61,6 +61,27 @@ export type StoredAction = {
   action: Action;
 };
 
+/**
+ * O resultado de uma partida encerrada — `game_results` de §7.
+ *
+ * Diferente de tudo o mais nesta porta, **não serve para restaurar nada**: uma
+ * partida terminada não volta a ser jogada. É estatística, e é a única linha do
+ * banco que existe para ser lida por gente em vez de por código.
+ *
+ * `scores` guarda a decomposição de todos, não só a do vencedor: "quem ganhou"
+ * cabe em `winnerId`, mas "por quanto, e de onde vieram os pontos" é a pergunta
+ * que alguém realmente faz depois — e reconstruí-la a partir do snapshot final
+ * exigiria carregar o estado inteiro para somar seis números.
+ */
+export type StoredResult = {
+  roomId: string;
+  /** `null` numa partida encerrada sem vencedor (abandono). */
+  winnerId: string | null;
+  scores: Record<string, VictoryBreakdown>;
+  turns: number;
+  durationSeconds: number;
+};
+
 export interface Store {
   /** Cria ou atualiza. O `secretHash` só é escrito na criação. */
   savePlayer(player: StoredPlayer): Promise<void>;
@@ -77,6 +98,10 @@ export interface Store {
   loadLatestSnapshot(roomId: string): Promise<StoredSnapshot | undefined>;
   /** Ações com `seq` **maior** que o informado, em ordem crescente. */
   loadActionsAfter(roomId: string, seq: number): Promise<StoredAction[]>;
+
+  /** Idempotente: uma sala tem um resultado, e regravá-lo sobrescreve. */
+  saveResult(result: StoredResult): Promise<void>;
+  loadResult(roomId: string): Promise<StoredResult | undefined>;
 
   close(): Promise<void>;
 }
@@ -168,6 +193,10 @@ export class NullStore implements Store {
   }
   async loadActionsAfter(_roomId: string, _seq: number): Promise<StoredAction[]> {
     return [];
+  }
+  async saveResult(_result: StoredResult): Promise<void> {}
+  async loadResult(_roomId: string): Promise<StoredResult | undefined> {
+    return undefined;
   }
   async close(): Promise<void> {}
 }

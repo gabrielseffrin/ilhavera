@@ -4,10 +4,9 @@
  * O SQL daquele arquivo foi escrito na Fase 1 e é a referência; se os dois
  * divergirem, quem manda é este arquivo, porque é dele que sai a migração.
  *
- * Uma divergência deliberada: `game_results` de §7 **não** está aqui. Ela guarda
- * estatística de partida encerrada, não faz parte de restaurar uma partida viva,
- * e tabela criada sem quem a escreva é peso morto. Entra quando houver tela de
- * fim de jogo (Fase 5).
+ * `game_results` entrou na Fase 5, junto da tela que a justifica. Continua sendo
+ * a única tabela aqui que **não** participa de restaurar uma partida viva —
+ * `restaurarSalas` nem a lê. Ela existe para ser consultada depois, por gente.
  *
  * Sobre os tipos: `state` e `action` são `jsonb` com o tipo do motor colado por
  * `$type`. Isso é uma promessa ao compilador, não uma verificação — o que sai do
@@ -29,7 +28,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import type { Action, GameState } from '@ilhavera/rules';
+import type { Action, GameState, VictoryBreakdown } from '@ilhavera/rules';
 import type { RoomSettings } from '@ilhavera/protocol';
 
 export const players = pgTable('players', {
@@ -112,3 +111,24 @@ export const gameActions = pgTable(
     index('game_actions_room_seq_idx').on(t.roomId, t.seq),
   ],
 );
+
+/**
+ * O placar final de uma partida encerrada (§7).
+ *
+ * `winner_id` referencia `players` e é anulável: uma partida pode acabar sem
+ * vencedor, e uma chave estrangeira obrigatória transformaria abandono em erro
+ * de gravação.
+ *
+ * `scores` guarda a decomposição de todos os jogadores — o mesmo objeto que
+ * `scoreboard()` do motor devolve e que a tela de fim de partida desenha. Uma
+ * coluna por tipo de ponto engessaria a tabela na primeira regra nova.
+ */
+export const gameResults = pgTable('game_results', {
+  roomId: uuid('room_id')
+    .primaryKey()
+    .references(() => rooms.id, { onDelete: 'cascade' }),
+  winnerId: uuid('winner_id').references(() => players.id),
+  scores: jsonb('scores').$type<Record<string, VictoryBreakdown>>().notNull(),
+  turns: integer('turns').notNull(),
+  durationS: integer('duration_s').notNull(),
+});

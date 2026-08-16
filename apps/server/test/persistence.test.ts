@@ -27,7 +27,7 @@ describe('NullStore', () => {
       code: 'ABC234',
       hostId: 'a',
       status: 'lobby',
-      settings: { targetVictoryPoints: 10, boardMode: 'balanced' },
+      settings: { targetVictoryPoints: 10, boardMode: 'balanced', turnSeconds: null },
       createdAt: 0,
       finishedAt: null,
       seats: [],

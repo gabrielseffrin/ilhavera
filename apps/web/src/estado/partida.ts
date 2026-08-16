@@ -47,6 +47,14 @@ export type EstadoDaPartida = {
    * a versão e fecharia o compositor de troca no meio da digitação.
    */
   minhasJogadas: number;
+  /**
+   * Quando a mesa para de esperar, em epoch. `null` sem relógio — que é o padrão
+   * e o único caso do hot-seat.
+   *
+   * Fora de `mesa` porque não é estado de jogo: o motor não pode ler o relógio
+   * (§4.1), e o prazo é do servidor. Ver `Instantaneo.prazo`.
+   */
+  prazo: number | null;
 
   executar: (acao: Action) => void;
   reiniciar: (seed?: string) => void;
@@ -66,6 +74,7 @@ export function criarStoreDaPartida(driver: Driver): StoreDaPartida {
     erro: null,
     conexao: 'ligando',
     minhasJogadas: 0,
+    prazo: inicial?.prazo ?? null,
 
     executar: (acao) => {
       driver.executar(acao);
@@ -82,10 +91,11 @@ export function criarStoreDaPartida(driver: Driver): StoreDaPartida {
   }));
 
   driver.assinar({
-    aoMudar: ({ mesa, legais }) => {
+    aoMudar: ({ mesa, legais, prazo }) => {
       store.setState({
         mesa,
         legais,
+        prazo: prazo ?? null,
         ativo: quemAge(mesa),
         // A recusa some quando alguma coisa anda: manter o alerta depois da
         // jogada seguinte faria o erro acompanhar o jogador por três turnos.

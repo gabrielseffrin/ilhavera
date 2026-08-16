@@ -14,9 +14,11 @@
  * e não porque alguém filtrou.
  */
 
-import { type ActionOf, type BoardGraph } from '@ilhavera/rules';
+import { ROBBER_LABEL, type ActionOf, type BoardGraph } from '@ilhavera/rules';
 
+import { nomeDoHexagono } from './descricoes.js';
 import { cantosDoHexagono, pontosDoPoligono } from './geometria.js';
+import { t } from '../i18n/pt-BR.js';
 
 export type CamadaDoSaqueadorProps = {
   board: BoardGraph;
@@ -56,12 +58,26 @@ export function CamadaDoSaqueador({
             <polygon
               points={pontos}
               fill="transparent"
-              className="cursor-pointer"
+              className="cursor-pointer focus:outline-none focus-visible:stroke-white focus-visible:stroke-2"
+              role="button"
+              tabIndex={0}
+              aria-label={t.tabuleiro.moverSaqueadorPara(
+                ROBBER_LABEL,
+                nomeDoHexagono(board, hexId),
+              )}
               onClick={() => {
                 aoEscolherHex(hexId);
               }}
+              onKeyDown={(e) => {
+                // Mesmo par de teclas da `CamadaInterativa`, e mesmo motivo
+                // para o `preventDefault`: um `<polygon>` não é botão de
+                // verdade, e sem isto o Espaço rola a página.
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                aoEscolherHex(hexId);
+              }}
             >
-              <title>Mover o Saqueador para cá</title>
+              <title>{t.tabuleiro.moverSaqueador}</title>
             </polygon>
           </g>
         );

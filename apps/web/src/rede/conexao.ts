@@ -39,7 +39,17 @@ type EventosDoCliente = Record<
 
 type SocketDoJogo = Socket<EventosDoServidor, EventosDoCliente>;
 
-export type EstadoDaConexao = 'ligando' | 'ligado' | 'reconectando' | 'caido';
+/**
+ * Onde a conexão está.
+ *
+ * `inacessivel` separa **"nunca conectei"** de **"caí"**, e a distinção não é
+ * cosmética: são situações diferentes, com causas diferentes e saídas
+ * diferentes. Quem cai no meio de uma partida espera voltar e continuar; quem
+ * abre a página com o servidor fora do ar precisa saber que não há servidor —
+ * dizer "Reconectando…" a essa pessoa é descrever uma reconexão que nunca vai
+ * acontecer, para uma conexão que nunca existiu.
+ */
+export type EstadoDaConexao = 'ligando' | 'ligado' | 'reconectando' | 'caido' | 'inacessivel';
 
 /** Quanto se espera por um ack antes de desistir. */
 export const PRAZO_DO_ACK = 10_000;
@@ -90,13 +100,38 @@ export function criarConexao({ url, sessao, reconexao = true }: OpcoesDaConexao)
     for (const ouvir of ouvintesDeEstado) ouvir(novo);
   }
 
+  /** Vira `true` no primeiro `connect` e nunca mais volta. */
+  let jaConectou = false;
+
   socket.on('connect', () => {
+    jaConectou = true;
     mudarPara('ligado');
   });
 
   socket.on('disconnect', (motivo: string) => {
     // `io client disconnect` é o `fechar()` daqui de baixo: pedido, não perda.
     mudarPara(motivo === 'io client disconnect' ? 'caido' : 'reconectando');
+  });
+
+  /**
+   * A tentativa de conexão falhou.
+   *
+   * Este ouvinte faltava, e a falta tinha uma consequência concreta: quem
+   * abrisse a página com o servidor fora do ar ficava preso em `'ligando'` para
+   * sempre — o socket.io seguia tentando em silêncio e ninguém era avisado. O
+   * único sinal que chegava era o timeout de ack, dez segundos depois de um
+   * clique, dizendo que o servidor "não respondeu".
+   *
+   * Passou despercebido porque o aceite da Fase 4 sobe o servidor **antes** do
+   * cliente, então este caminho nunca era exercitado.
+   *
+   * Quem já conectou continua em `'reconectando'`: `connect_error` dispara a
+   * cada tentativa frustrada, inclusive durante uma reconexão legítima, e
+   * rebaixar o estado a cada uma delas apagaria a diferença que este bloco
+   * existe para preservar.
+   */
+  socket.on('connect_error', () => {
+    if (!jaConectou) mudarPara('inacessivel');
   });
 
   socket.io.on('reconnect_failed', () => {
@@ -133,6 +168,23 @@ export function criarConexao({ url, sessao, reconexao = true }: OpcoesDaConexao)
     socket,
 
     async enviar<T = unknown>(comando: NetworkCommand | ComandoSimples): Promise<Ack<T>> {
+      /**
+       * Quando **se sabe** que não há servidor, responde na hora.
+       *
+       * Só nestes dois estados. Em `'reconectando'` o comando segue para a fila
+       * do socket.io de propósito: ele é entregue na volta, e a idempotência por
+       * `requestId` cobre a entrega dupla — é o que faz um clique dado durante
+       * uma queda não se perder.
+       *
+       * Já quem nunca conectou, ou cujo socket foi fechado, não tem fila que vá
+       * a lugar nenhum: esperar os dez segundos do ack para então dizer "o
+       * servidor não respondeu" é fazer a pessoa aguardar por uma resposta que
+       * ninguém foi buscar.
+       */
+      if (estado === 'inacessivel' || estado === 'caido') {
+        return { ok: false, error: 'SEM_CONEXAO' };
+      }
+
       const requestId = `${prefixo}-${++contador}`;
       const payload = { requestId, ...(comando.payload ?? {}) };
 
@@ -174,6 +226,15 @@ export function criarConexao({ url, sessao, reconexao = true }: OpcoesDaConexao)
 
     fechar() {
       socket.disconnect();
+      /**
+       * O estado é marcado aqui, e não deixado por conta do `disconnect`.
+       *
+       * O evento só dispara em socket que chegou a conectar: fechar um que
+       * ainda estava tentando não produz `disconnect` nenhum, e o estado ficaria
+       * em `'ligando'` — dizendo que ainda há uma tentativa em curso depois de
+       * alguém ter pedido para parar.
+       */
+      mudarPara('caido');
     },
   };
 }

@@ -11,6 +11,7 @@
 
 import { createContext, useContext, type ReactNode } from 'react';
 
+import { useStoreDoChat, type EstadoDoChat } from './chat.js';
 import { clientePadrao, type Cliente } from './cliente.js';
 import { useStoreDaInterface, type EstadoDaInterface } from './interface.js';
 import { useStoreDaPartida, type EstadoDaPartida } from './partida.js';
@@ -71,3 +72,32 @@ const SEM_SALA: EstadoDaSala = {
   sair: () => Promise.resolve(),
   limparErro: () => undefined,
 };
+
+/**
+ * O chat também não existe no hot-seat — uma pessoa não conversa consigo mesma.
+ * Mesmo desenho inerte da sala: quem lê daqui recebe uma caixa vazia em vez de
+ * um `null` para cada componente tratar por conta.
+ */
+export function useChat<T>(seletor: (s: EstadoDoChat) => T): T {
+  const cliente = useCliente();
+  return useStoreDoChat(cliente.chat ?? CHAT_INERTE, seletor);
+}
+
+export function temChat(cliente: Cliente): boolean {
+  return cliente.chat !== null;
+}
+
+const SEM_CHAT: EstadoDoChat = {
+  mensagens: [],
+  enviando: false,
+  erro: null,
+  enviar: () => Promise.resolve(),
+  limparErro: () => undefined,
+};
+
+const CHAT_INERTE = {
+  getState: () => SEM_CHAT,
+  getInitialState: () => SEM_CHAT,
+  setState: () => undefined,
+  subscribe: () => () => undefined,
+} as unknown as NonNullable<Cliente['chat']>;

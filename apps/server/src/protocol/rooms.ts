@@ -11,7 +11,7 @@ import type { FastifyBaseLogger } from 'fastify';
 
 import type { PlayerDirectory } from '../identity/players.js';
 import { toRoomView, type Room, type RoomRegistry } from '../rooms/registry.js';
-import { emitSnapshot } from './game.js';
+import { emitSnapshot, type GameDeps } from './game.js';
 import { handle } from './handle.js';
 import type { GameServer, GameSocket } from './types.js';
 
@@ -20,6 +20,8 @@ export type RoomDeps = {
   players: PlayerDirectory;
   rooms: RoomRegistry;
   log: FastifyBaseLogger;
+  /** O relógio da sala, quando há. Ver `game/timer.ts`. */
+  timer?: GameDeps['timer'];
 };
 
 /** O broadcast de sala. Nunca leva `GameState` junto — `RoomView` é o que sai. */
@@ -28,7 +30,7 @@ export function broadcastRoom(io: GameServer, room: Room): void {
 }
 
 export function registerRoomCommands(socket: GameSocket, deps: RoomDeps): void {
-  const { io, players, rooms, log } = deps;
+  const { io, players, rooms, log, timer } = deps;
 
   handle(
     socket,
@@ -69,6 +71,10 @@ export function registerRoomCommands(socket: GameSocket, deps: RoomDeps): void {
       const saiu = rooms.leave(playerId);
       if (!saiu.ok) return { ok: false, error: saiu.error };
 
+      // Sala de lobby que sumiu não tem prazo a vencer.
+      if (saiu.value.removed && saiu.value.room.game === null) {
+        timer?.cancelar(saiu.value.room.code);
+      }
       void socket.leave(saiu.value.room.code);
       broadcastRoom(io, saiu.value.room);
 
@@ -98,8 +104,11 @@ export function registerRoomCommands(socket: GameSocket, deps: RoomDeps): void {
       if (!iniciada.ok) return { ok: false, error: iniciada.error };
 
       broadcastRoom(io, iniciada.value);
+      // O relógio começa a contar com a partida, e antes da emissão: o primeiro
+      // snapshot já leva o prazo do primeiro turno.
+      timer?.reagendar(iniciada.value);
       // O tabuleiro nasce aqui: cada um recebe a própria projeção da partida.
-      emitSnapshot(io, iniciada.value);
+      emitSnapshot(io, iniciada.value, timer);
 
       return { ok: true, data: toRoomView(iniciada.value) };
     },

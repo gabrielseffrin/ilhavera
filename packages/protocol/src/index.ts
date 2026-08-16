@@ -65,9 +65,41 @@ const ROOM_CODE = z
 export const ROOM_SETTINGS = z.object({
   targetVictoryPoints: z.number().int().min(3).max(20).default(10),
   boardMode: z.enum(['balanced', 'random']).default('balanced'),
+  /**
+   * Segundos por turno, ou `null` para sem relógio — fecha a questão 5 da §11.
+   *
+   * **Desligado por padrão.** Partida entre amigos raramente quer cronômetro, e
+   * ligá-lo sem pedir apressaria quem só estava pensando. O que o relógio existe
+   * para resolver é o outro caso: alguém fecha a aba no meio do próprio turno e
+   * a mesa espera para sempre.
+   *
+   * O mínimo é 30s porque abaixo disso não dá para pensar uma jogada, e o
+   * máximo, 10 min, porque acima disso o relógio deixou de ser relógio.
+   *
+   * **Não é ajuste do motor.** `GameSettings` não conhece este campo, e nem
+   * poderia: `packages/rules` não pode olhar para o relógio (§4.1). Quem conta o
+   * tempo é o servidor, e o que ele faz ao estourar é submeter uma jogada
+   * legal pelo mesmo caminho de todas as outras.
+   */
+  turnSeconds: z.number().int().min(30).max(600).nullable().default(null),
 });
 
 export type RoomSettings = z.infer<typeof ROOM_SETTINGS>;
+
+/**
+ * A parte dos ajustes que o motor entende.
+ *
+ * Existe para o `createGame` receber só o que é dele. Passar `RoomSettings`
+ * inteiro faria `turnSeconds` entrar em `state.settings`, viajar no snapshot
+ * JSONB e aparecer na `ClientView` — um ajuste de servidor morando dentro do
+ * pacote que não pode saber que horas são.
+ */
+export function ajustesDoMotor(settings: RoomSettings): {
+  targetVictoryPoints: number;
+  boardMode: 'balanced' | 'random';
+} {
+  return { targetVictoryPoints: settings.targetVictoryPoints, boardMode: settings.boardMode };
+}
 
 /**
  * Comandos cliente → servidor (§5.1). Todo comando carrega `requestId` para
@@ -105,7 +137,12 @@ export const COMMANDS = {
   'game:tradeConfirm': z.object({ tradeId: z.string(), withPlayerId: z.string() }),
   'game:endTurn': z.object({}),
 
-  'chat:send': z.object({ text: z.string().min(1).max(500) }),
+  /**
+   * `.trim()` antes do `.min(1)`, e nessa ordem: uma mensagem só de espaços não
+   * é mensagem, e deixar passar significaria uma linha em branco no histórico
+   * de todo mundo por um Enter distraído.
+   */
+  'chat:send': z.object({ text: z.string().trim().min(1).max(500) }),
 
   /**
    * "Perdi o fio, me manda o estado inteiro" — a regra de consistência de §5.2.
@@ -142,13 +179,20 @@ export const SERVER_EVENTS = [
   'state:snapshot',
   'state:patch',
   /**
-   * `game:event` saiu do contrato na Fase 4, como a §5.2 previa que sairia se a
-   * Fase 3 não pedisse por ele — e não pediu. Os eventos narrativos viajam
-   * dentro do `state:patch`, junto da versão a que pertencem. Um segundo canal
-   * com a mesma informação seria uma segunda versão da verdade, com a agravante
-   * de chegar fora de ordem em relação ao estado que ela narra.
+   * Dois eventos da §5.2 não estão aqui, e saíram pelo mesmo raciocínio.
+   *
+   * `game:event` saiu na Fase 4, como a §5.2 previa que sairia se a Fase 3 não
+   * pedisse por ele — e não pediu. Os eventos narrativos viajam dentro do
+   * `state:patch`, junto da versão a que pertencem; um segundo canal com a
+   * mesma informação seria uma segunda versão da verdade, com a agravante de
+   * chegar fora de ordem em relação ao estado que ela narra.
+   *
+   * `game:error` saiu na Fase 5, depois de duas fases declarado e nunca
+   * assinado. A recusa de um comando é o `ack`, que é a resposta autoritativa e
+   * chega a quem enviou. O evento repetia a mesma informação por um canal que o
+   * cliente teria de costurar de volta à chamada que a originou — trabalho para
+   * o jogador ver duas vezes o que aconteceu uma.
    */
-  'game:error',
   'room:updated',
   'chat:message',
 ] as const;
@@ -167,7 +211,24 @@ export type ServerEventName = (typeof SERVER_EVENTS)[number];
 export type SnapshotPayload = {
   view: ClientView;
   legal: Action[];
+  /** Ver `PatchPayload.deadline`. */
+  deadline: number | null;
 };
+
+/**
+ * Quando a mesa para de esperar — epoch em milissegundos, ou `null` se a sala
+ * não tem relógio.
+ *
+ * **Instante absoluto, e não "faltam 40 segundos".** Mandar o restante e deixar
+ * o navegador decrementar diverge no primeiro atraso de rede, e a divergência
+ * cresce a cada patch. Com o instante, cada cliente subtrai do próprio relógio e
+ * erra no máximo o desvio entre os dois — que não se acumula.
+ *
+ * Viaja **dentro** do snapshot e do patch, e não num evento próprio, pela mesma
+ * razão que a lista de jogadas legais viaja: um prazo chegando desacompanhado da
+ * versão a que pertence é uma segunda fonte da verdade para divergir da
+ * primeira. É o erro que aposentou o `game:event` e o `game:error`.
+ */
 
 /**
  * `state:patch` — o delta de uma jogada (§5.2).
@@ -181,6 +242,7 @@ export type PatchPayload = {
   events: GameEvent[];
   view: ClientViewDynamic;
   legal: Action[];
+  deadline: number | null;
 };
 
 export const ROOM_STATUSES = ['lobby', 'playing', 'finished'] as const;
@@ -216,7 +278,6 @@ export type ServerEventPayloads = {
   'session:issued': { playerId: string; token: string };
   'state:snapshot': SnapshotPayload;
   'state:patch': PatchPayload;
-  'game:error': { requestId: string; code: AckErrorCode };
   'room:updated': RoomView;
   /** Declarado desde a Fase 2; ganha handler na Fase 5, com o chat. */
   'chat:message': { playerId: string; nickname: string; text: string; at: number };

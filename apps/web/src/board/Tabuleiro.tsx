@@ -18,6 +18,7 @@ import { COR_DO_MAR } from './cores.js';
 import { Hexagono } from './Hexagono.js';
 import { Portos } from './Portos.js';
 import { Saqueador } from './Saqueador.js';
+import { t } from '../i18n/pt-BR.js';
 
 /**
  * Serve tanto o estado completo (hot-seat) quanto a projeção que vem do
@@ -40,7 +41,7 @@ export function Tabuleiro({ estado, children }: TabuleiroProps): React.JSX.Eleme
       viewBox={viewBox(caixa)}
       className="h-full w-full"
       role="img"
-      aria-label="Tabuleiro da partida"
+      aria-label={t.tabuleiro.rotulo}
       data-testid="tabuleiro"
     >
       <rect

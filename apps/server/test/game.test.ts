@@ -471,8 +471,16 @@ describe('state:resync', () => {
   });
 });
 
-describe('game:error', () => {
-  it('vai só para quem enviou o comando recusado', async () => {
+/**
+ * A recusa de um comando é o **ack**, e mais nada.
+ *
+ * `game:error` existiu no contrato da Fase 2 à Fase 4 sem nunca ser assinado
+ * pelo cliente, e saiu na Fase 5. O que estes casos guardam é o que sobrou: que
+ * a resposta chega, que ela é a mesma no reenvio, e que uma jogada recusada não
+ * vira notícia para o resto da mesa.
+ */
+describe('recusa de comando', () => {
+  it('responde no ack de quem enviou, sem emitir evento para ninguém', async () => {
     const p = await partida(3);
     const { acao, cliente } = daVez(p);
     const { nome, payload } = comandoDe(acao);
@@ -480,41 +488,42 @@ describe('game:error', () => {
     const outro = p.clientes.find((c) => c !== cliente);
     if (outro === undefined) throw new Error('mesa de um jogador só');
 
-    let vazouParaOutro = 0;
-    cliente.socket.on('game:error', () => {
-      vazouParaOutro += 1;
-    });
+    // Deixa o tráfego de abertura da sala assentar: os `room:updated` e
+    // `state:snapshot` de quem acabou de entrar chegam depois do `await` que
+    // montou a mesa, e contá-los aqui seria acusar a recusa de algo que ela não
+    // fez.
+    await new Promise((r) => setTimeout(r, 50));
 
-    const recebido = outro.next<{ requestId: string; code: string }>('game:error');
-    await outro.send(nome, payload, 'req-do-erro');
-    const erro = await recebido;
+    // Qualquer evento, para qualquer um: a recusa não pode virar tráfego de
+    // sala. `onAny` pega inclusive um evento novo que alguém acrescente sem
+    // pensar nisto.
+    const eventos: string[] = [];
+    for (const c of p.clientes) {
+      c.socket.onAny((nomeDoEvento: string) => eventos.push(nomeDoEvento));
+    }
 
-    expect(erro).toEqual({ requestId: 'req-do-erro', code: 'NOT_YOUR_TURN' });
-    expect(vazouParaOutro).toBe(0);
-  });
-
-  it('não repete o aviso quando o comando recusado é reenviado', async () => {
-    const p = await partida(3);
-    const { acao, cliente } = daVez(p);
-    const { nome, payload } = comandoDe(acao);
-
-    const outro = p.clientes.find((c) => c !== cliente);
-    if (outro === undefined) throw new Error('mesa de um jogador só');
-
-    await outro.send(nome, payload, 'req-do-erro');
-
-    let avisos = 0;
-    outro.socket.on('game:error', () => {
-      avisos += 1;
-    });
-
-    // Reenvio: o ack repetido já é a resposta. Avisar de novo faria a interface
-    // reclamar duas vezes de uma coisa que aconteceu uma vez.
     const ack = await outro.send(nome, payload, 'req-do-erro');
     await new Promise((r) => setTimeout(r, 50));
 
     expect(ack).toEqual({ ok: false, error: 'NOT_YOUR_TURN' });
-    expect(avisos).toBe(0);
+    expect(eventos).toEqual([]);
+  });
+
+  it('o reenvio devolve a mesma recusa, verbatim', async () => {
+    const p = await partida(3);
+    const { acao, cliente } = daVez(p);
+    const { nome, payload } = comandoDe(acao);
+
+    const outro = p.clientes.find((c) => c !== cliente);
+    if (outro === undefined) throw new Error('mesa de um jogador só');
+
+    // É o ponto inteiro da idempotência: quem perdeu o ack e reenviou recebe a
+    // mesma coisa, e não uma recusa diferente porque o turno andou nesse meio.
+    const primeiro = await outro.send(nome, payload, 'req-do-erro');
+    const segundo = await outro.send(nome, payload, 'req-do-erro');
+
+    expect(primeiro).toEqual({ ok: false, error: 'NOT_YOUR_TURN' });
+    expect(segundo).toEqual(primeiro);
   });
 });
 

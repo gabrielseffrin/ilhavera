@@ -8,6 +8,35 @@
  * em rede, o aceite provaria o robô, não a interface.
  */
 
+import { fireEvent } from '@testing-library/react';
+
+/**
+ * Aciona um alvo **pelo teclado**, quando ele for um alvo do tabuleiro.
+ *
+ * A divisão não é conveniência, é honestidade sobre o que dá para provar aqui.
+ * Num `<button>` de verdade, quem transforma Enter em clique é o navegador, e o
+ * jsdom não implementa isso — um teste que "provasse" essa parte estaria
+ * provando o jsdom. Já nos alvos do tabuleiro, que são `<circle>` e `<polygon>`
+ * com `role="button"`, quem transforma Enter em jogada é **código deste
+ * repositório**, e é exatamente isso que precisa de teste.
+ *
+ * Devolve `true` quando acionou pelo teclado, para o teste poder exigir que isso
+ * tenha acontecido um número honesto de vezes em vez de aceitar uma partida
+ * inteira feita só de cliques em botão.
+ */
+export function acionar(alvo: Element, tecla: 'Enter' | ' ' = 'Enter'): boolean {
+  const doTabuleiro = alvo.getAttribute('role') === 'button' && alvo.tagName !== 'BUTTON';
+
+  if (!doTabuleiro) {
+    fireEvent.click(alvo);
+    return false;
+  }
+
+  (alvo as unknown as HTMLElement).focus?.();
+  fireEvent.keyDown(alvo, { key: tecla });
+  return true;
+}
+
 /**
  * O que clicar agora, em ordem de prioridade.
  *

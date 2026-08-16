@@ -2,7 +2,7 @@
  * Um hexágono: terreno, ficha numérica e os pontinhos de probabilidade.
  */
 
-import { HEX_SIZE, TERRAIN_LABELS, type HexNode } from '@ilhavera/rules';
+import { HEX_SIZE, ROBBER_LABEL, TERRAIN_LABELS, type HexNode } from '@ilhavera/rules';
 
 import { cantosDoHexagono, pontosDoPoligono } from './geometria.js';
 import { COR_DO_TERRENO, corDaFicha, pontosDeProbabilidade } from './cores.js';
@@ -15,13 +15,23 @@ export type HexagonoProps = {
 
 export function Hexagono({ hex, bloqueado }: HexagonoProps): React.JSX.Element {
   const cantos = cantosDoHexagono(hex.pixel);
-  const rotulo =
-    hex.number === null
-      ? TERRAIN_LABELS[hex.terrain]
-      : `${TERRAIN_LABELS[hex.terrain]}, ficha ${hex.number}`;
+
+  /**
+   * O rótulo diz as três coisas que o desenho diz: o terreno, a ficha e se o
+   * Saqueador está ali. A terceira faltava, e é a que muda a jogada — um
+   * hexágono bloqueado não produz, e quem só ouve a tela precisa saber disso
+   * tanto quanto quem vê a sombra.
+   */
+  const rotulo = [
+    TERRAIN_LABELS[hex.terrain],
+    hex.number === null ? null : `ficha ${hex.number}`,
+    bloqueado ? `com o ${ROBBER_LABEL}` : null,
+  ]
+    .filter((p) => p !== null)
+    .join(', ');
 
   return (
-    <g data-hex={hex.id} data-terreno={hex.terrain}>
+    <g data-hex={hex.id} data-terreno={hex.terrain} role="img" aria-label={rotulo}>
       <title>{rotulo}</title>
       <polygon
         points={pontosDoPoligono(cantos)}

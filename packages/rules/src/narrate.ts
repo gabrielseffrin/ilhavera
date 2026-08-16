@@ -16,8 +16,12 @@
  * - **`playerName` é injetado.** É o único ponto em que a CLI difere: ela
  *   embrulha o nome em código ANSI. Cor de terminal não sobe para o motor.
  *
- * O `switch` de `describeEvent` não tem `default` de propósito: variante nova
- * de evento sem narração não compila.
+ * Na Fase 5 (M7) as 23 frases saíram do `switch` para `narracao/pt-BR.ts`. O
+ * texto é o mesmo — os testes deste arquivo passam sem uma asserção alterada, e
+ * é isso que prova que a extração não mexeu em nada. O que se ganhou é que um
+ * segundo idioma passa a ser um arquivo novo em vez de uma reescrita da função,
+ * e a exaustividade continua garantida: `PacoteDeNarracao` é um `Record` sobre
+ * `GameEvent['type']`, então evento novo sem frase não compila.
  */
 
 import type { BoardGraph } from './board/graph.js';
@@ -25,15 +29,9 @@ import type { GameEvent } from './state.js';
 import type { Action, ActionType } from './actions/types.js';
 import type { EdgeId, HexId, PlayerColor, PlayerId, ResourceCount, VertexId } from './types.js';
 import { RESOURCES } from './types.js';
-import {
-  DEV_CARD_LABELS,
-  LARGEST_ARMY_LABEL,
-  LONGEST_ROAD_LABEL,
-  RESOURCE_LABELS,
-  ROBBER_LABEL,
-  TERRAIN_LABELS,
-  portLabel,
-} from './labels.js';
+import { RESOURCE_LABELS, TERRAIN_LABELS, portLabel } from './labels.js';
+import { NARRACAO_PT_BR } from './narracao/pt-BR.js';
+import type { ContextoDeNarracao, PacoteDeNarracao } from './narracao/pt-BR.js';
 
 /**
  * O mínimo para narrar. `GameState['players']` e `ClientView['players']`
@@ -47,6 +45,13 @@ export type NarrationScope = {
 export type NarrationOptions = {
   /** Como escrever o nome de um jogador. Padrão: o nome cru, sem enfeite. */
   playerName?: (id: PlayerId) => string;
+  /**
+   * O pacote de frases. Padrão: pt-BR, o único escrito (Fase 5, M7).
+   *
+   * É por aqui que um segundo idioma entraria — um arquivo ao lado de
+   * `narracao/pt-BR.ts`, sem tocar nesta função.
+   */
+  narracao?: PacoteDeNarracao;
 };
 
 function nome(scope: NarrationScope, id: PlayerId, options?: NarrationOptions): string {
@@ -102,84 +107,29 @@ export function describeEvent(
   event: GameEvent,
   options?: NarrationOptions,
 ): string {
-  const quem = (id: PlayerId): string => nome(scope, id, options);
   const board = scope.board;
+  const contexto: ContextoDeNarracao = {
+    quem: (id) => nome(scope, id, options),
+    vertice: (id) => describeVertex(board, id),
+    aresta: (id) => describeEdge(board, id),
+    hex: (id) => describeHex(board, id),
+    recursos: (counts) => describeResources(counts as ResourceCount),
+  };
 
-  switch (event.type) {
-    case 'gameStarted':
-      return `Partida iniciada (semente ${event.data.seed}).`;
-    case 'settlementPlaced':
-      return `${quem(event.actor)} colocou um assentamento em ${describeVertex(board, event.data.vertexId)}.`;
-    case 'roadPlaced':
-      return `${quem(event.actor)} colocou uma estrada ${describeEdge(board, event.data.edgeId)}${event.data.free ? ' (grátis)' : ''}.`;
-    case 'cityBuilt':
-      return `${quem(event.actor)} construiu uma cidade em ${describeVertex(board, event.data.vertexId)}.`;
-    case 'diceRolled':
-      return `${quem(event.actor)} rolou ${event.data.dice[0]} + ${event.data.dice[1]} = ${event.data.total}.`;
-    case 'resourcesProduced': {
-      const ganhos = Object.entries(event.data.gains)
-        .map(([id, counts]) => `${quem(id)}: ${describeResources(counts)}`)
-        .join(' | ');
-      const bloqueados =
-        event.data.blockedByBank.length === 0
-          ? ''
-          : ` (banco sem estoque: ${event.data.blockedByBank.map((r) => RESOURCE_LABELS[r]).join(', ')})`;
-      return `Produção — ${ganhos === '' ? 'ninguém produziu' : ganhos}${bloqueados}`;
-    }
-    case 'setupProduction':
-      return `${quem(event.actor)} recebeu ${describeResources(event.data.gains)} pelo segundo assentamento.`;
-    case 'discardRequired': {
-      const alvos = Object.entries(event.data.counts)
-        .map(([id, n]) => `${quem(id)} (${n})`)
-        .join(', ');
-      return `Saiu 7 — descarte obrigatório: ${alvos}.`;
-    }
-    case 'discarded':
-      return `${quem(event.actor)} descartou ${describeResources(event.data.resources)}.`;
-    case 'robberMoved':
-      return `${quem(event.actor)} moveu o ${ROBBER_LABEL} para ${describeHex(board, event.data.hexId)}.`;
-    case 'stolen': {
-      // `resource` vem nulo quando quem lê não é ladrão nem vítima: a projeção
-      // de §4.5 filtra o log, não só o estado.
-      const carta =
-        event.data.resource === null ? 'uma carta' : `1× ${RESOURCE_LABELS[event.data.resource]}`;
-      return `${quem(event.actor)} roubou ${carta} de ${quem(event.data.from)}.`;
-    }
-    case 'devCardBought':
-      return `${quem(event.actor)} comprou uma Carta de Progresso (restam ${event.data.deckLeft}).`;
-    case 'devCardPlayed':
-      return `${quem(event.actor)} jogou ${DEV_CARD_LABELS[event.data.card]}.`;
-    case 'monopolyResolved': {
-      const total = Object.values(event.data.taken).reduce((a, b) => a + b, 0);
-      return `Monopólio de ${RESOURCE_LABELS[event.data.resource]}: ${quem(event.actor)} recolheu ${total} carta(s).`;
-    }
-    case 'yearOfPlentyResolved':
-      return `${quem(event.actor)} pegou ${event.data.resources.map((r) => RESOURCE_LABELS[r]).join(' + ')} do banco.`;
-    case 'bankTraded':
-      return `${quem(event.actor)} trocou ${event.data.rate}× ${RESOURCE_LABELS[event.data.give]} por 1× ${RESOURCE_LABELS[event.data.receive]}.`;
-    case 'tradeOffered':
-      return `${quem(event.actor)} propôs ${describeResources(event.data.terms.give)} por ${describeResources(event.data.terms.receive)}.`;
-    case 'tradeResponded': {
-      const r = event.data.response;
-      const texto =
-        r.type === 'accept' ? 'aceitou' : r.type === 'decline' ? 'recusou' : 'contrapropôs';
-      return `${quem(event.actor)} ${texto} a proposta.`;
-    }
-    case 'tradeCompleted':
-      return `${quem(event.actor)} fechou negócio com ${quem(event.data.partner)}.`;
-    case 'longestRoadChanged':
-      return event.data.owner === null
-        ? `${LONGEST_ROAD_LABEL} ficou sem dono.`
-        : `${LONGEST_ROAD_LABEL} (${event.data.length}) agora é de ${quem(event.data.owner)}.`;
-    case 'largestArmyChanged':
-      return event.data.owner === null
-        ? `${LARGEST_ARMY_LABEL} ficou sem dono.`
-        : `${LARGEST_ARMY_LABEL} (${event.data.size}) agora é de ${quem(event.data.owner)}.`;
-    case 'turnEnded':
-      return `Turno ${event.data.turnNumber}: vez de ${quem(event.data.nextPlayer)}.`;
-    case 'gameWon':
-      return `🏆 ${quem(event.actor)} venceu com ${event.data.victoryPoints} pontos de vitória!`;
-  }
+  /**
+   * A asserção existe porque `event` é a união inteira aqui, e indexar o pacote
+   * com `event.type` genérico colapsa as 23 assinaturas numa só — o TypeScript
+   * passa a exigir a interseção dos parâmetros. É o mesmo colapso que
+   * `apps/server/src/protocol/game.ts` documenta ao registrar um handler por
+   * linha, e a garantia que importa continua de pé no **pacote**: `PacoteDeNarracao`
+   * é um `Record` sobre `GameEvent['type']`, então evento novo sem frase não
+   * compila lá.
+   */
+  const frase = NARRACAO_PT_BR[event.type] as (e: GameEvent, c: ContextoDeNarracao) => string;
+  const escolhido = options?.narracao?.[event.type] as
+    ((e: GameEvent, c: ContextoDeNarracao) => string) | undefined;
+
+  return (escolhido ?? frase)(event, contexto);
 }
 
 /**

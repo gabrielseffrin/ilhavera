@@ -27,6 +27,16 @@ export type Modo = 'hot-seat' | 'rede';
 export type Instantaneo = {
   mesa: ClientView;
   legais: Action[];
+  /**
+   * Quando a mesa para de esperar — epoch em ms, ou `null` sem relógio.
+   *
+   * Fica **fora** de `mesa` porque não é estado de jogo: `ClientView` é a
+   * projeção do motor puro, e o motor não pode saber que horas são (§4.1). O
+   * prazo é do servidor e viaja no envelope do snapshot e do patch.
+   *
+   * No hot-seat é sempre `null` — não há relógio contra quem jogar.
+   */
+  prazo?: number | null;
 };
 
 export type Ouvintes = {

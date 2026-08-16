@@ -21,6 +21,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { Action, ActionType, GameState } from '@ilhavera/rules';
 
 import { toCommand } from '@ilhavera/protocol';
+import { MemoryStore } from '../src/persistence/memory.js';
 import { startTestServer, type Client, type TestServer } from './helpers/server.js';
 import type { GameRoom } from '../src/game/room.js';
 import type { RoomView } from '../src/rooms/registry.js';
@@ -112,11 +113,19 @@ async function aguardarSincronia(clientes: Client[], versao: number): Promise<vo
 
 const MAX_PASSOS = 3000;
 
-type Resultado = { passos: number; final: GameState; tipos: Set<ActionType> };
+type Resultado = {
+  passos: number;
+  final: GameState;
+  tipos: Set<ActionType>;
+  /** O diário da partida, para conferir o que ficou gravado no fim. */
+  store: MemoryStore;
+  roomId: string;
+};
 
 /** Uma partida inteira, do lobby ao vencedor, falando só por socket. */
 async function jogarPartidaCompleta(semente: string, sementeDoRoteiro: number): Promise<Resultado> {
-  atual = await startTestServer({ registry: { makeSeed: () => semente } });
+  const store = new MemoryStore();
+  atual = await startTestServer({ store, registry: { makeSeed: () => semente } });
   const s = atual;
 
   const host = await s.connect();
@@ -180,7 +189,17 @@ async function jogarPartidaCompleta(semente: string, sementeDoRoteiro: number): 
     await aguardarSincronia(clientes, passos);
   }
 
-  const resultado = { passos, final: jogo().state, tipos };
+  const resultado = {
+    passos,
+    final: jogo().state,
+    tipos,
+    store,
+    roomId: s.server.rooms.byCode(criada.data.code)?.id ?? '',
+  };
+
+  // A gravação do resultado passa pela fila de escrita da sala; o `close` do
+  // servidor não a espera.
+  await new Promise((r) => setTimeout(r, 50));
 
   // Cada partida sobe o próprio servidor; fecha antes da seguinte.
   await s.close();
@@ -195,13 +214,43 @@ describe('aceite da Fase 2: partida completa por WebSocket', () => {
     const exercitadas = new Set<ActionType>();
 
     for (const [i, semente] of sementes.entries()) {
-      const { passos, final, tipos } = await jogarPartidaCompleta(semente, 20260812 + i * 7919);
+      const { passos, final, tipos, store, roomId } = await jogarPartidaCompleta(
+        semente,
+        20260812 + i * 7919,
+      );
 
       expect(final.phase, `${semente} não terminou em ${MAX_PASSOS} jogadas`).toBe('finished');
       expect(final.winner, `${semente} terminou sem vencedor`).not.toBeNull();
       // Toda jogada aceita andou a versão exatamente uma vez.
       expect(final.version).toBe(passos);
       expect(passos).toBeGreaterThan(100);
+
+      /**
+       * O que a partida encerrada deixou no diário (Fase 5, M1). Vale a pena
+       * aqui e não num teste de unidade porque é a única partida de verdade que
+       * a suíte joga até o fim: um resultado gravado a partir de um estado
+       * montado à mão provaria que a chamada existe, não que ela acontece.
+       */
+      const resultado = await store.loadResult(roomId);
+      expect(resultado?.winnerId, `${semente} não gravou o vencedor`).toBe(final.winner);
+      expect(resultado?.turns).toBe(final.turnNumber);
+      expect(Object.keys(resultado?.scores ?? {})).toHaveLength(final.players.length);
+      // O vencedor gravado alcançou de fato o alvo — o placar do banco e o do
+      // motor contam a mesma partida.
+      expect(resultado?.scores[final.winner ?? '']?.total).toBeGreaterThanOrEqual(
+        final.settings.targetVictoryPoints,
+      );
+
+      // A sala saiu de `playing`: `restore()` só ressuscita o que está lá, e uma
+      // partida decidida voltando viva no próximo boot seria um fantasma.
+      expect(await store.loadRooms('playing')).toHaveLength(0);
+      const [encerrada] = await store.loadRooms('finished');
+      expect(encerrada?.id).toBe(roomId);
+      expect(encerrada?.finishedAt).not.toBeNull();
+
+      // E o snapshot final é o do estado que decidiu a partida, não o do turno
+      // anterior: vencer não passa por `turnEnded`.
+      expect((await store.loadLatestSnapshot(roomId))?.version).toBe(final.version);
 
       for (const t of tipos) exercitadas.add(t);
     }

@@ -137,7 +137,7 @@ describe('restauração: o que dá errado', () => {
       code: 'ZZZ999',
       hostId,
       status: 'playing',
-      settings: { targetVictoryPoints: 10, boardMode: 'balanced' },
+      settings: { targetVictoryPoints: 10, boardMode: 'balanced', turnSeconds: null },
       createdAt: 1,
       finishedAt: null,
       seats: [{ playerId: hostId, seatIndex: 0, color: 'red' }],

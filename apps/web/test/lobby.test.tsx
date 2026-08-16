@@ -24,11 +24,19 @@ function salaCom(jogadores: RoomView['players'], extras: Partial<RoomView> = {})
     code: 'ABC234',
     hostId: EU,
     status: 'lobby',
-    settings: { targetVictoryPoints: 10, boardMode: 'balanced' },
+    settings: { targetVictoryPoints: 10, boardMode: 'balanced', turnSeconds: null },
     players: jogadores,
     canStart: jogadores.length >= 3,
     ...extras,
   };
+}
+
+/**
+ * O botão de uma cor no seletor. O nome acessível traz também a marca —
+ * "verde (triângulo)" —, então a busca é por prefixo.
+ */
+function botaoDeCor(nome: string): HTMLElement {
+  return screen.getByRole('button', { name: new RegExp(`^${nome} \\(`) });
 }
 
 const ANA = { id: EU, nickname: 'Ana', color: 'red' as const, connected: true };
@@ -71,7 +79,12 @@ describe('tela de entrada', () => {
 
     expect(await screen.findByTestId('codigo-da-sala')).toHaveTextContent('ABC234');
     expect(conexao.enviados[0]?.name).toBe('room:create');
-    expect(conexao.enviados[0]?.payload).toEqual({ nickname: 'Ana' });
+    // O relógio vai junto desde a Fase 5 (M5), e `null` — sem limite — é o
+    // padrão do seletor e o padrão do contrato.
+    expect(conexao.enviados[0]?.payload).toEqual({
+      nickname: 'Ana',
+      settings: { turnSeconds: null },
+    });
   });
 
   it('código inexistente vira recado, e não tela em branco', async () => {
@@ -152,23 +165,25 @@ describe('tela de sala', () => {
     await naSala([ANA, BRUNO]);
 
     // `red` é da Ana (eu): marcada e clicável. `blue` é do Bruno: fora.
-    expect(screen.getByRole('button', { name: 'red' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'blue' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'green' })).toBeEnabled();
+    // Por nome acessível em português: `aria-label="red"` fazia o leitor de
+    // tela soletrar em inglês no meio de uma frase em português (Fase 5, M3).
+    expect(botaoDeCor('vermelho')).toHaveAttribute('aria-pressed', 'true');
+    expect(botaoDeCor('azul')).toBeDisabled();
+    expect(botaoDeCor('verde')).toBeEnabled();
   });
 
   it('escolher cor manda o comando', async () => {
     const conexao = await naSala([ANA, BRUNO]);
     conexao.responder({ ok: true, data: salaCom([{ ...ANA, color: 'green' }, BRUNO]) });
 
-    await userEvent.click(screen.getByRole('button', { name: 'green' }));
+    await userEvent.click(botaoDeCor('verde'));
 
     expect(conexao.enviados[0]).toEqual({
       name: 'room:setColor',
       payload: { color: 'green' },
     });
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'green' })).toHaveAttribute('aria-pressed', 'true');
+      expect(botaoDeCor('verde')).toHaveAttribute('aria-pressed', 'true');
     });
   });
 });
@@ -191,5 +206,63 @@ describe('estado da conexão', () => {
     });
     // A sala continua na tela: quem caiu quer continuar vendo onde estava.
     expect(screen.getByTestId('codigo-da-sala')).toBeInTheDocument();
+  });
+
+  /**
+   * Quem nunca conectou não está "reconectando".
+   *
+   * Este caso não existia, e a falta tinha consequência: `make web` sem
+   * `make dev` ao lado deixava a pessoa olhando para "Reconectando…" — uma
+   * reconexão que nunca ia acontecer, para uma conexão que nunca existiu. O
+   * aceite da Fase 4 sobe o servidor **antes** do cliente, então o caminho
+   * nunca era exercitado.
+   */
+  it('distingue "nunca conectei" de "caí"', async () => {
+    const { conexao } = montar();
+
+    conexao.mudarEstado('inacessivel');
+    await waitFor(() => {
+      expect(screen.getByTestId('reconectando')).toHaveTextContent('Servidor fora do ar');
+    });
+    expect(screen.getByTestId('reconectando')).toHaveAttribute('data-conexao', 'inacessivel');
+
+    conexao.mudarEstado('reconectando');
+    await waitFor(() => {
+      expect(screen.getByTestId('reconectando')).toHaveTextContent('Reconectando…');
+    });
+
+    conexao.mudarEstado('caido');
+    await waitFor(() => {
+      expect(screen.getByTestId('reconectando')).toHaveTextContent('Sem conexão com o servidor');
+    });
+  });
+
+  it('em desenvolvimento, diz o que fazer em vez de só constatar', async () => {
+    const { conexao } = montar();
+
+    conexao.mudarEstado('inacessivel');
+
+    // A dica existe só neste estado: quem caiu no meio da partida já tem o
+    // servidor de pé, e mandá-lo rodar `make dev` seria conselho errado.
+    await waitFor(() => {
+      expect(screen.getByTestId('dica-de-dev')).toHaveTextContent('make dev');
+    });
+
+    conexao.mudarEstado('reconectando');
+    await waitFor(() => {
+      expect(screen.queryByTestId('dica-de-dev')).not.toBeInTheDocument();
+    });
+  });
+
+  it('a faixa some quando a conexão volta', async () => {
+    const { conexao } = montar();
+
+    conexao.mudarEstado('inacessivel');
+    await waitFor(() => screen.getByTestId('reconectando'));
+
+    conexao.mudarEstado('ligado');
+    await waitFor(() => {
+      expect(screen.queryByTestId('reconectando')).not.toBeInTheDocument();
+    });
   });
 });

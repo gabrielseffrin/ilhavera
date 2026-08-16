@@ -13,6 +13,7 @@
 
 import { criarConexao, type Conexao } from '../rede/conexao.js';
 import { sessaoDoNavegador, type Sessao } from '../rede/sessao.js';
+import { criarStoreDoChat, type StoreDoChat } from './chat.js';
 import { criarDriverDeRede } from './driverDeRede.js';
 import { criarMotorLocal } from './motorLocal.js';
 import { criarStoreDaInterface, type StoreDaInterface } from './interface.js';
@@ -29,6 +30,8 @@ export type Cliente = {
   partida: StoreDaPartida;
   /** `null` no hot-seat: não há sala. */
   sala: StoreDaSala | null;
+  /** `null` no hot-seat: uma pessoa não conversa consigo mesma. */
+  chat: StoreDoChat | null;
   tela: StoreDaInterface;
 };
 
@@ -58,6 +61,7 @@ export function criarCliente(opcoes: OpcoesDoCliente): Cliente {
       conexao: null,
       partida: criarStoreDaPartida(motor),
       sala: null,
+      chat: null,
       tela: criarStoreDaInterface(),
     };
   }
@@ -82,6 +86,7 @@ export function criarCliente(opcoes: OpcoesDoCliente): Cliente {
       ...(opcoes.lerApelido === undefined ? {} : { lerApelido: opcoes.lerApelido }),
       ...(opcoes.gravarApelido === undefined ? {} : { gravarApelido: opcoes.gravarApelido }),
     }),
+    chat: criarStoreDoChat(conexao),
     tela: criarStoreDaInterface(),
   };
 }

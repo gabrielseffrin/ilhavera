@@ -13,6 +13,7 @@
 import type {
   StoredAction,
   StoredPlayer,
+  StoredResult,
   StoredRoom,
   StoredRoomStatus,
   StoredSnapshot,
@@ -31,6 +32,7 @@ export class MemoryStore implements Store {
   readonly #snapshots = new Map<string, Map<number, StoredSnapshot>>();
   /** `roomId` → `seq` → ação. */
   readonly #actions = new Map<string, Map<number, StoredAction>>();
+  readonly #results = new Map<string, StoredResult>();
 
   async savePlayer(player: StoredPlayer): Promise<void> {
     const existente = this.#players.get(player.id);
@@ -57,10 +59,11 @@ export class MemoryStore implements Store {
   }
 
   async deleteRoom(id: string): Promise<void> {
-    // `ON DELETE CASCADE` no esquema: snapshots e ações vão junto.
+    // `ON DELETE CASCADE` no esquema: snapshots, ações e resultado vão junto.
     this.#rooms.delete(id);
     this.#snapshots.delete(id);
     this.#actions.delete(id);
+    this.#results.delete(id);
   }
 
   async loadRooms(status: StoredRoomStatus): Promise<StoredRoom[]> {
@@ -96,6 +99,15 @@ export class MemoryStore implements Store {
       .filter((a) => a.seq > seq)
       .sort((a, b) => a.seq - b.seq)
       .map(clonar);
+  }
+
+  async saveResult(result: StoredResult): Promise<void> {
+    this.#results.set(result.roomId, clonar(result));
+  }
+
+  async loadResult(roomId: string): Promise<StoredResult | undefined> {
+    const encontrado = this.#results.get(roomId);
+    return encontrado === undefined ? undefined : clonar(encontrado);
   }
 
   async close(): Promise<void> {}

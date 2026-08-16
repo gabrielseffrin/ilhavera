@@ -16,7 +16,8 @@ import {
   type PlayerId,
 } from '@ilhavera/rules';
 
-import { COR_DO_JOGADOR, CONTORNO_DO_JOGADOR } from '../board/cores.js';
+import { IconeDoJogador } from '../board/Marca.js';
+import { t } from '../i18n/pt-BR.js';
 
 export type PainelDeAdversariosProps = {
   mesa: ClientView;
@@ -32,7 +33,7 @@ export function PainelDeAdversarios({ mesa, ativo }: PainelDeAdversariosProps): 
       data-testid="painel-de-adversarios"
       className="rounded-xl bg-slate-900/70 p-3 text-sm text-white"
     >
-      <h2 className="mb-2 font-semibold">Jogadores</h2>
+      <h2 className="mb-2 font-semibold">{t.jogadores.titulo}</h2>
 
       <ul className="flex flex-col gap-1.5">
         {mesa.players.map((p) => {
@@ -47,48 +48,47 @@ export function PainelDeAdversarios({ mesa, ativo }: PainelDeAdversariosProps): 
                 p.id === ativo ? 'bg-white/15' : ''
               }`}
             >
-              <span
-                aria-hidden
-                className="inline-block h-3 w-3 shrink-0 rounded-full border"
-                style={{
-                  backgroundColor: COR_DO_JOGADOR[p.color],
-                  borderColor: CONTORNO_DO_JOGADOR[p.color],
-                }}
-              />
+              {/* A mesma marca que as peças dele levam no tabuleiro: é assim
+                  que se liga "aquela estrada" a "aquele nome" sem depender de
+                  distinguir vermelho de verde. */}
+              <IconeDoJogador cor={p.color} tamanho={13} />
               <span className="font-medium">{p.name}</span>
               {p.id === daVez && (
-                <span className="text-white/60" title="jogador da vez">
+                <span className="text-white/60" title={t.jogadores.jogadorDaVez}>
                   ▶
                 </span>
               )}
 
-              <span className="ml-auto tabular-nums" title="pontos de vitória públicos">
+              <span className="ml-auto tabular-nums" title={t.jogadores.pvPublicos}>
                 {p.victoryPointsPublic} PV
               </span>
-              <span className="tabular-nums text-white/70" title="cartas de recurso">
+              <span className="tabular-nums text-white/70" title={t.jogadores.cartasDeRecurso}>
                 {p.resourceCount}🂠
               </span>
-              <span className="tabular-nums text-white/70" title="Cartas de Progresso">
+              <span className="tabular-nums text-white/70" title={t.jogadores.cartasDeProgresso}>
                 {p.devCardCount}✦
               </span>
-              <span className="tabular-nums text-white/70" title="Soldados jogados">
+              <span className="tabular-nums text-white/70" title={t.jogadores.soldadosJogados}>
                 {p.knightsPlayed}⚔
               </span>
-              <span
-                className="tabular-nums text-white/50"
-                title="peças restantes: estradas / assentamentos / cidades"
-              >
+              {/* `/50` media ~4,2:1 contra o fundo do painel, abaixo do piso
+                  de 4,5:1 — e este texto é dos menores da tela. */}
+              <span className="tabular-nums text-white/70" title={t.jogadores.pecasRestantes}>
                 {p.piecesLeft.roads}/{p.piecesLeft.settlements}/{p.piecesLeft.cities}
               </span>
 
               {mesa.longestRoad.owner === p.id && (
-                <Selo titulo={`${LONGEST_ROAD_LABEL} (${mesa.longestRoad.length})`}>Estrada</Selo>
+                <Selo titulo={`${LONGEST_ROAD_LABEL} (${mesa.longestRoad.length})`}>
+                  {t.jogadores.seloEstrada}
+                </Selo>
               )}
               {mesa.largestArmy.owner === p.id && (
-                <Selo titulo={`${LARGEST_ARMY_LABEL} (${mesa.largestArmy.size})`}>Exército</Selo>
+                <Selo titulo={`${LARGEST_ARMY_LABEL} (${mesa.largestArmy.size})`}>
+                  {t.jogadores.seloExercito}
+                </Selo>
               )}
               {devendo > 0 && (
-                <Selo titulo={`precisa descartar ${devendo} cartas`}>descartando {devendo}</Selo>
+                <Selo titulo={t.jogadores.descartando(devendo)}>descartando {devendo}</Selo>
               )}
             </li>
           );

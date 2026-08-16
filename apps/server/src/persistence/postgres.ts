@@ -24,10 +24,11 @@ import { Pool } from 'pg';
 
 import type { PlayerColor } from '@ilhavera/rules';
 
-import { gameActions, gameSnapshots, players, roomPlayers, rooms } from './schema.js';
+import { gameActions, gameResults, gameSnapshots, players, roomPlayers, rooms } from './schema.js';
 import type {
   StoredAction,
   StoredPlayer,
+  StoredResult,
   StoredRoom,
   StoredRoomStatus,
   StoredSnapshot,
@@ -231,6 +232,47 @@ export class PostgresStore implements Store {
     }));
   }
 
+  async saveResult(result: StoredResult): Promise<void> {
+    await this.#db
+      .insert(gameResults)
+      .values({
+        roomId: result.roomId,
+        winnerId: result.winnerId,
+        scores: result.scores,
+        turns: result.turns,
+        durationS: result.durationSeconds,
+      })
+      // Regravar não pode explodir: a jogada da vitória pode ser reaplicada num
+      // replay de restauração, e derrubar o servidor por causa da estatística
+      // seria perder a sala para salvar um número.
+      .onConflictDoUpdate({
+        target: gameResults.roomId,
+        set: {
+          winnerId: result.winnerId,
+          scores: result.scores,
+          turns: result.turns,
+          durationS: result.durationSeconds,
+        },
+      });
+  }
+
+  async loadResult(roomId: string): Promise<StoredResult | undefined> {
+    const [linha] = await this.#db
+      .select()
+      .from(gameResults)
+      .where(eq(gameResults.roomId, roomId))
+      .limit(1);
+
+    if (linha === undefined) return undefined;
+    return {
+      roomId: linha.roomId,
+      winnerId: linha.winnerId,
+      scores: linha.scores,
+      turns: linha.turns,
+      durationSeconds: linha.durationS,
+    };
+  }
+
   /**
    * Esvazia todas as tabelas. Fora da interface `Store` de propósito: é para o
    * teste começar do zero e para o reset de desenvolvimento, não para o
@@ -238,7 +280,7 @@ export class PostgresStore implements Store {
    */
   async limparTudo(): Promise<void> {
     await this.#db.execute(
-      sql`TRUNCATE ${gameActions}, ${gameSnapshots}, ${roomPlayers}, ${rooms}, ${players} CASCADE`,
+      sql`TRUNCATE ${gameResults}, ${gameActions}, ${gameSnapshots}, ${roomPlayers}, ${rooms}, ${players} CASCADE`,
     );
   }
 

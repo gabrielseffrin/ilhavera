@@ -16,8 +16,10 @@
 import type { FastifyBaseLogger } from 'fastify';
 
 import { toAction, type GameCommandName } from '@ilhavera/protocol';
-import type { GameEvent } from '@ilhavera/rules';
+import type { Action, GameEvent } from '@ilhavera/rules';
 
+import type { SubmitAck } from '../game/room.js';
+import type { TurnTimer } from '../game/timer.js';
 import type { PlayerId } from '../identity/players.js';
 import type { Room, RoomRegistry } from '../rooms/registry.js';
 import { handle } from './handle.js';
@@ -27,7 +29,17 @@ export type GameDeps = {
   io: GameServer;
   rooms: RoomRegistry;
   log: FastifyBaseLogger;
+  /**
+   * O relógio da sala. Opcional porque quase todo teste sobe o servidor sem
+   * ele, e uma sala sem `turnSeconds` não tem prazo nenhum a informar.
+   */
+  timer?: Pick<TurnTimer, 'prazoDe' | 'reagendar' | 'cancelar'>;
 };
+
+/** O prazo da sala, ou `null` quando não há relógio. */
+function prazo(room: Room, timer: GameDeps['timer']): number | null {
+  return timer?.prazoDe(room) ?? null;
+}
 
 /**
  * Estado completo, um por jogador (§5.2: "enviado ao entrar e ao reconectar").
@@ -35,21 +47,28 @@ export type GameDeps = {
  * O endereço é a sala privada de cada `playerId`, e não o socket: quem abriu
  * duas abas tem duas conexões e as duas precisam do mesmo estado.
  */
-export function emitSnapshot(io: GameServer, room: Room): void {
+export function emitSnapshot(io: GameServer, room: Room, timer?: GameDeps['timer']): void {
   const game = room.game;
   if (game === null) return;
 
+  const deadline = prazo(room, timer);
   for (const seat of room.seats) {
-    io.to(seat.playerId).emit('state:snapshot', game.snapshotFor(seat.playerId));
+    io.to(seat.playerId).emit('state:snapshot', {
+      ...game.snapshotFor(seat.playerId),
+      deadline,
+    });
   }
 }
 
 /** Snapshot para uma conexão só — o caso da reconexão. */
-export function emitSnapshotTo(socket: GameSocket, room: Room): void {
+export function emitSnapshotTo(socket: GameSocket, room: Room, timer?: GameDeps['timer']): void {
   const game = room.game;
   if (game === null) return;
 
-  socket.emit('state:snapshot', game.snapshotFor(socket.data.playerId));
+  socket.emit('state:snapshot', {
+    ...game.snapshotFor(socket.data.playerId),
+    deadline: prazo(room, timer),
+  });
 }
 
 /**
@@ -65,19 +84,76 @@ export function emitSnapshotTo(socket: GameSocket, room: Room): void {
  *
  * O que vai é só a metade que muda: o tabuleiro foi no snapshot e não se repete.
  */
-export function emitPatch(io: GameServer, room: Room, events: readonly GameEvent[]): void {
+export function emitPatch(
+  io: GameServer,
+  room: Room,
+  events: readonly GameEvent[],
+  timer?: GameDeps['timer'],
+): void {
   const game = room.game;
   if (game === null) return;
 
   const version = game.version;
+  const deadline = prazo(room, timer);
   for (const seat of room.seats) {
     io.to(seat.playerId).emit('state:patch', {
       version,
       events: game.patchFor(events, seat.playerId),
       view: game.dynamicFor(seat.playerId),
       legal: game.legalFor(seat.playerId),
+      deadline,
     });
   }
+}
+
+/**
+ * Aplica uma jogada e propaga o resultado — o caminho comum do comando de
+ * socket e do auto-passe do relógio.
+ *
+ * Existe para que a jogada automática do `TurnTimer` percorra **exatamente** o
+ * mesmo caminho de uma jogada humana: a mesma fila, a mesma idempotência, a
+ * mesma persistência, o mesmo `state:patch` e o mesmo encerramento de sala.
+ * Um atalho aqui seria uma segunda maneira de a partida andar, e as duas
+ * divergiriam no primeiro detalhe que só uma delas passasse a tratar.
+ */
+export async function aplicarJogada(
+  deps: GameDeps,
+  room: Room,
+  playerId: PlayerId,
+  requestId: string,
+  action: Action,
+): Promise<SubmitAck> {
+  const { io, rooms, log, timer } = deps;
+  const game = room.game;
+  if (game === null) return { ok: false, error: 'ROOM_NOT_STARTED' };
+
+  const { ack, applied, events } = await game.submit({ playerId, requestId, action });
+
+  if (applied) {
+    log.debug(
+      { code: room.code, jogada: action.type, eventos: events.map((e) => e.type) },
+      'jogada aplicada',
+    );
+
+    // O prazo reinicia **antes** da emissão, senão o patch levaria o prazo
+    // vencido da jogada anterior e o contador da tela piscaria em zero.
+    timer?.reagendar(room);
+    emitPatch(io, room, events, timer);
+
+    /**
+     * O patch vai **antes** de a sala mudar de status: quem acabou de vencer
+     * precisa receber o estado final, senão a tela de fim de partida não teria
+     * placar para mostrar. Encerrar a sala é arrumação do servidor, e vem
+     * depois de a mesa saber o que aconteceu.
+     */
+    if (events.some((e) => e.type === 'gameWon')) {
+      log.info({ code: room.code, vencedor: playerId }, 'partida encerrada');
+      rooms.finish(room);
+      timer?.reagendar(room);
+    }
+  }
+
+  return ack;
 }
 
 export function registerGameCommands(socket: GameSocket, deps: GameDeps): void {
@@ -98,7 +174,13 @@ export function registerGameCommands(socket: GameSocket, deps: GameDeps): void {
       if (room === undefined) return { ok: false, error: 'NOT_IN_ROOM' };
       if (room.game === null) return { ok: false, error: 'ROOM_NOT_STARTED' };
 
-      const snapshot = room.game.snapshotFor(playerId);
+      // Com o prazo, como toda emissão de estado: um resync que devolvesse o
+      // estado sem o relógio deixaria o contador da tela parado até a jogada
+      // seguinte, justo em quem acabou de perceber que ficou para trás.
+      const snapshot = {
+        ...room.game.snapshotFor(playerId),
+        deadline: prazo(room, deps.timer),
+      };
       socket.emit('state:snapshot', snapshot);
       return { ok: true, data: snapshot };
     },
@@ -129,50 +211,28 @@ export function registerGameCommands(socket: GameSocket, deps: GameDeps): void {
   ligar(socket, 'game:endTurn', deps);
 }
 
+/**
+ * `game:error` foi aposentado na Fase 5, pelo motivo que a Fase 4 já tinha
+ * anotado: **o ack é a resposta autoritativa**, e o cliente nunca assinou o
+ * evento. Dois caminhos para o mesmo alerta são duas chances de o jogador ver
+ * duas vezes o que aconteceu uma — e uma delas chegando fora de ordem em
+ * relação à outra. Mesmo destino do `game:event`, pelo mesmo raciocínio.
+ */
 function ligar<K extends GameCommandName>(socket: GameSocket, name: K, deps: GameDeps): void {
-  const { io, rooms, log } = deps;
-
   handle(
     socket,
     name,
     async (payload, playerId: PlayerId, requestId) => {
-      const room = rooms.byPlayer(playerId);
+      const room = deps.rooms.byPlayer(playerId);
       if (room === undefined) return { ok: false, error: 'NOT_IN_ROOM' };
 
-      const game = room.game;
       // `ROOM_NOT_STARTED` estava declarado desde a M2 e nunca tinha usuário:
       // é este. Jogar antes do `room:start` não é jogada inválida, é sala que
       // ainda não virou partida.
-      if (game === null) return { ok: false, error: 'ROOM_NOT_STARTED' };
+      if (room.game === null) return { ok: false, error: 'ROOM_NOT_STARTED' };
 
-      const { ack, applied, deduped, events } = await game.submit({
-        playerId,
-        requestId,
-        action: toAction(name, payload, playerId),
-      });
-
-      if (applied) {
-        log.debug(
-          { code: room.code, comando: name, eventos: events.map((e) => e.type) },
-          'jogada aplicada',
-        );
-        emitPatch(io, room, events);
-      } else if (!ack.ok && !deduped) {
-        /**
-         * Redundante com o ack de propósito. O ack é a resposta autoritativa,
-         * mas o store do cliente assina um fluxo de eventos; sem isto, cada
-         * ponto de chamada teria que costurar a própria rejeição no log da
-         * interface. Vai só para quem enviou — errar não é notícia de mesa.
-         *
-         * Reenvio deduplicado não passa por aqui: o `ack` repetido já é a
-         * resposta, e reemitir o erro faria a interface avisar duas vezes de
-         * uma coisa que aconteceu uma vez.
-         */
-        socket.emit('game:error', { requestId, code: ack.error });
-      }
-
-      return ack;
+      return aplicarJogada(deps, room, playerId, requestId, toAction(name, payload, playerId));
     },
-    log,
+    deps.log,
   );
 }

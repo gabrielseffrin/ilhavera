@@ -93,11 +93,20 @@ describe('Tabuleiro', () => {
     expect(saqueador).not.toBeNull();
     expect(saqueador?.querySelector('title')?.textContent).toBe('Saqueador');
 
-    // E está sobre o hexágono certo: o vulto fica logo abaixo do centro dele.
+    /**
+     * E está sobre o hexágono certo. A posição vem do `transform` do grupo, e
+     * não das coordenadas de cada forma: desde a Fase 5 o vulto é desenhado na
+     * origem e posicionado por translação, que é o que permite ao CSS animá-lo
+     * deslizando de um hexágono para outro em vez de teleportar.
+     */
     const alvo = estado.board.hexes[estado.robberHex]!.pixel;
-    const sombra = saqueador?.querySelector('ellipse');
-    expect(Number(sombra?.getAttribute('cx'))).toBeCloseTo(alvo.x, 6);
-    expect(Number(sombra?.getAttribute('cy'))).toBeGreaterThan(alvo.y);
+    const [, tx, ty] = /translate\(([-\d.]+) ([-\d.]+)\)/.exec(
+      saqueador?.getAttribute('transform') ?? '',
+    ) as string[];
+
+    expect(Number(tx)).toBeCloseTo(alvo.x, 6);
+    // O vulto fica logo abaixo do centro do hexágono: o centro é da ficha.
+    expect(Number(ty)).toBeGreaterThan(alvo.y);
   });
 
   it('desenha os 9 portos, cada um ligado a dois vértices', () => {

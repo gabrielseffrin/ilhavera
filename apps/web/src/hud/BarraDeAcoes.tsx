@@ -54,7 +54,9 @@ export function BarraDeAcoes({
   if (grupos.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap gap-2" data-testid="barra-de-acoes">
+    /* `shrink-0`: a barra é a única coisa da coluna que não pode encolher — sem
+       ela não há jogada, e um tabuleiro grande e sem botões não serve. */
+    <div className="flex shrink-0 flex-wrap gap-1.5 sm:gap-2" data-testid="barra-de-acoes">
       {grupos.map(({ type, actions }) => {
         const unica = actions.length === 1 && !SEMPRE_ABREM.includes(type) ? actions[0] : undefined;
 
@@ -68,7 +70,10 @@ export function BarraDeAcoes({
               if (unica !== undefined) onEscolher(unica);
               else onAbrir(type);
             }}
-            className="rounded-lg bg-white/95 px-3 py-2 text-sm font-medium text-slate-800 shadow transition hover:bg-white"
+            // `py-2` fica mesmo nas telas pequenas: o botão precisa continuar
+            // acertável com o polegar. O que encolhe é a folga lateral e o
+            // texto, que é onde há gordura.
+            className="rounded-lg bg-white/95 px-2 py-2 text-xs font-medium text-slate-800 shadow transition hover:bg-white sm:px-3 sm:text-sm"
           >
             {ACTION_LABELS[type]}
             {unica === undefined && !SEMPRE_ABREM.includes(type) && (

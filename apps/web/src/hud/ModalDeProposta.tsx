@@ -26,6 +26,7 @@ import {
 import { COR_DO_JOGADOR } from '../board/cores.js';
 import { ContadorDeRecursos } from './ContadorDeRecursos.js';
 import { Modal } from './Modal.js';
+import { t } from '../i18n/pt-BR.js';
 
 export type Alvo = { id: PlayerId; name: string; color: keyof typeof COR_DO_JOGADOR };
 
@@ -72,7 +73,7 @@ export function ModalDeProposta({
     <Modal id="proposta" titulo={titulo} aoFechar={aoFechar}>
       <div className="flex flex-col gap-4 sm:flex-row">
         <section className="flex flex-col gap-2">
-          <h3 className="text-sm font-medium text-white/80">Você oferece</h3>
+          <h3 className="text-sm font-medium text-white/80">{t.troca.voceOferece}</h3>
           <ContadorDeRecursos
             id="ofereco"
             valor={ofereco}
@@ -83,14 +84,14 @@ export function ModalDeProposta({
         </section>
 
         <section className="flex flex-col gap-2">
-          <h3 className="text-sm font-medium text-white/80">Você pede</h3>
+          <h3 className="text-sm font-medium text-white/80">{t.troca.vocePede}</h3>
           <ContadorDeRecursos id="peco" valor={peco} aoMudar={setPeco} />
         </section>
       </div>
 
       {alvos.length > 0 && (
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-sm font-medium text-white/80">Para quem</legend>
+          <legend className="text-sm font-medium text-white/80">{t.troca.paraQuem}</legend>
           <div className="flex flex-wrap gap-2">
             {alvos.map((alvo) => {
               const marcado = escolhidos.includes(alvo.id);

@@ -9,9 +9,18 @@
 
 import { PLAYER_COLORS, type PlayerColor } from '@ilhavera/rules';
 
-import { COR_DO_JOGADOR, CONTORNO_DO_JOGADOR } from '../board/cores.js';
-import { useCliente, useSala } from '../estado/contexto.js';
+import {
+  CONTORNO_DO_JOGADOR,
+  COR_DO_JOGADOR,
+  MARCA_DO_JOGADOR,
+  NOME_DA_COR,
+  NOME_DA_MARCA,
+} from '../board/cores.js';
+import { IconeDoJogador, Marca } from '../board/Marca.js';
+import { Chat } from '../hud/Chat.js';
+import { temChat, useCliente, useSala } from '../estado/contexto.js';
 import { rotuloDeErro } from '../rede/erros.js';
+import { t } from '../i18n/pt-BR.js';
 
 export function Sala(): React.JSX.Element {
   const sala = useSala((s) => s.sala);
@@ -20,7 +29,8 @@ export function Sala(): React.JSX.Element {
   const sair = useSala((s) => s.sair);
   const erro = useSala((s) => s.erro);
   const ocupado = useSala((s) => s.ocupado);
-  const conexao = useCliente().conexao;
+  const cliente = useCliente();
+  const conexao = cliente.conexao;
 
   if (sala === null) throw new Error('a tela de sala foi montada sem sala');
 
@@ -30,10 +40,12 @@ export function Sala(): React.JSX.Element {
   const tomadas = new Set(sala.players.map((p) => p.color));
 
   return (
-    <main className="flex h-full items-center justify-center p-4">
-      <div className="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-white/10 p-6 backdrop-blur">
+    /* Mesmo cuidado da `Entrada`: o cartão da sala é mais alto que um celular
+       deitado, e precisa rolar até o topo em vez de ser cortado nele. */
+    <main className="flex h-full items-center justify-center overflow-y-auto p-4">
+      <div className="my-auto flex w-full max-w-md flex-col gap-4 rounded-2xl bg-white/10 p-6 backdrop-blur">
         <header className="flex flex-col gap-1">
-          <span className="text-sm text-white/70">Código da sala</span>
+          <span className="text-sm text-white/70">{t.sala.codigo}</span>
           <strong
             className="font-mono text-3xl tracking-[0.3em] text-white"
             data-testid="codigo-da-sala"
@@ -50,29 +62,23 @@ export function Sala(): React.JSX.Element {
               data-jogador={jogador.id}
               data-conectado={jogador.connected}
             >
-              <span
-                aria-hidden
-                className="size-4 rounded-full border-2"
-                style={{
-                  background: COR_DO_JOGADOR[jogador.color],
-                  borderColor: CONTORNO_DO_JOGADOR[jogador.color],
-                }}
-              />
+              {/* A mesma marca que as peças dele vão levar no tabuleiro. */}
+              <IconeDoJogador cor={jogador.color} tamanho={16} />
               <span className={jogador.connected ? '' : 'opacity-50'}>{jogador.nickname}</span>
               {jogador.id === sala.hostId && (
-                <span className="text-xs text-white/60" title="host">
-                  anfitrião
+                <span className="text-xs text-white/60" title={t.sala.anfitriao}>
+                  {t.sala.anfitriao}
                 </span>
               )}
               {!jogador.connected && (
-                <span className="ml-auto text-xs text-white/60">desconectado</span>
+                <span className="ml-auto text-xs text-white/60">{t.sala.desconectado}</span>
               )}
             </li>
           ))}
         </ul>
 
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-sm text-white/90">Sua cor</legend>
+          <legend className="text-sm text-white/90">{t.sala.suaCor}</legend>
           <div className="flex gap-2">
             {PLAYER_COLORS.map((cor: PlayerColor) => {
               const indisponivel = tomadas.has(cor) && cor !== minhaCor;
@@ -80,21 +86,33 @@ export function Sala(): React.JSX.Element {
                 <button
                   key={cor}
                   type="button"
-                  aria-label={cor}
+                  /* O nome em português e a marca junto: escolher a cor é
+                     justamente onde saber qual símbolo se ganha importa. */
+                  aria-label={`${NOME_DA_COR[cor]} (${NOME_DA_MARCA[MARCA_DO_JOGADOR[cor]]})`}
                   aria-pressed={cor === minhaCor}
                   disabled={indisponivel || ocupado}
                   onClick={() => {
                     void escolherCor(cor);
                   }}
                   data-cor={cor}
-                  className={`size-8 rounded-full border-2 transition disabled:opacity-25 ${
+                  className={`flex size-8 items-center justify-center rounded-full border-2 transition disabled:opacity-25 ${
                     cor === minhaCor ? 'ring-2 ring-white' : ''
                   }`}
                   style={{
                     background: COR_DO_JOGADOR[cor],
                     borderColor: CONTORNO_DO_JOGADOR[cor],
                   }}
-                />
+                >
+                  <svg width={16} height={16} viewBox="0 0 16 16" aria-hidden>
+                    <Marca
+                      marca={MARCA_DO_JOGADOR[cor]}
+                      x={8}
+                      y={8}
+                      r={4}
+                      cor={CONTORNO_DO_JOGADOR[cor]}
+                    />
+                  </svg>
+                </button>
               );
             })}
           </div>
@@ -109,15 +127,19 @@ export function Sala(): React.JSX.Element {
             }}
             className="rounded-lg bg-emerald-600 px-3 py-2 text-white transition hover:bg-emerald-500 disabled:opacity-40"
           >
-            Iniciar partida
+            {t.sala.iniciar}
           </button>
         ) : (
-          <p className="text-sm text-white/80">Esperando o anfitrião começar.</p>
+          <p className="text-sm text-white/80">{t.sala.esperandoAnfitriao}</p>
         )}
 
         {souHost && !sala.canStart && (
-          <p className="text-sm text-white/70">Faltam jogadores para começar.</p>
+          <p className="text-sm text-white/70">{t.sala.faltamJogadores}</p>
         )}
+
+        {/* A conversa começa aqui, esperando o quarto jogador, e continua
+            durante a partida — mesmo store, outra tela. */}
+        {temChat(cliente) && <Chat euId={eu} className="max-h-56" />}
 
         <button
           type="button"
@@ -126,7 +148,7 @@ export function Sala(): React.JSX.Element {
           }}
           className="text-sm text-white/70 underline transition hover:text-white"
         >
-          Sair da sala
+          {t.sala.sair}
         </button>
 
         {erro !== null && (

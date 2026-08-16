@@ -83,7 +83,13 @@ describe('room:create', () => {
 
     expect(ack.ok).toBe(true);
     if (!ack.ok) return;
-    expect(ack.data.settings).toEqual({ targetVictoryPoints: 10, boardMode: 'balanced' });
+    expect(ack.data.settings).toEqual({
+      targetVictoryPoints: 10,
+      boardMode: 'balanced',
+      // Sem relógio por padrão (Fase 5, M5): partida entre amigos raramente
+      // quer cronômetro, e ligá-lo sem pedir apressaria quem só está pensando.
+      turnSeconds: null,
+    });
   });
 
   it('recusa apelido vazio na borda, antes de criar qualquer coisa', async () => {

@@ -22,12 +22,13 @@ export type DriverDeRede = Driver & { modo: 'rede' };
 export function criarDriverDeRede(conexao: Conexao): DriverDeRede {
   let mesa: ClientView | null = null;
   let legais: Action[] = [];
+  let prazo: number | null = null;
   let minhasJogadas = 0;
   const ouvintes = new Set<Ouvintes>();
 
   function anunciar(): void {
     if (mesa === null) return;
-    const instantaneo: Instantaneo = { mesa, legais };
+    const instantaneo: Instantaneo = { mesa, legais, prazo };
     for (const o of ouvintes) o.aoMudar(instantaneo);
   }
 
@@ -38,6 +39,7 @@ export function criarDriverDeRede(conexao: Conexao): DriverDeRede {
   conexao.ao('state:snapshot', (dados: SnapshotPayload) => {
     mesa = dados.view;
     legais = dados.legal;
+    prazo = dados.deadline;
     anunciar();
   });
 
@@ -60,6 +62,7 @@ export function criarDriverDeRede(conexao: Conexao): DriverDeRede {
 
     mesa = applyClientViewPatch(mesa, dados.view, dados.events);
     legais = dados.legal;
+    prazo = dados.deadline;
     anunciar();
   });
 
@@ -73,7 +76,7 @@ export function criarDriverDeRede(conexao: Conexao): DriverDeRede {
   return {
     modo: 'rede',
     minhasJogadas: () => minhasJogadas,
-    inicial: () => (mesa === null ? null : { mesa, legais }),
+    inicial: () => (mesa === null ? null : { mesa, legais, prazo }),
 
     assinar(o) {
       ouvintes.add(o);

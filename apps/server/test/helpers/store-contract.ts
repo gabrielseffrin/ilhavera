@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createGame, reduce, type Action, type GameState } from '@ilhavera/rules';
 
-import type { Store, StoredPlayer, StoredRoom } from '../../src/persistence/store.js';
+import type { Store, StoredPlayer, StoredResult, StoredRoom } from '../../src/persistence/store.js';
 
 const JOGADORES = [
   { id: '11111111-1111-4111-8111-111111111111', name: 'Ana', color: 'red' as const },
@@ -33,7 +33,7 @@ function sala(overrides: Partial<StoredRoom> = {}): StoredRoom {
     code: 'ABC234',
     hostId: JOGADORES[0]!.id,
     status: 'lobby',
-    settings: { targetVictoryPoints: 10, boardMode: 'balanced' },
+    settings: { targetVictoryPoints: 10, boardMode: 'balanced', turnSeconds: null },
     createdAt: 1_700_000_000_000,
     finishedAt: null,
     seats: JOGADORES.map((j, i) => ({ playerId: j.id, seatIndex: i, color: j.color })),
@@ -117,7 +117,11 @@ export function contratoDeStore(nome: string, criar: () => Promise<Store>): void
         const emLobby = await store.loadRooms('lobby');
         expect(emLobby).toHaveLength(1);
         expect(emLobby[0]?.code).toBe('ABC234');
-        expect(emLobby[0]?.settings).toEqual({ targetVictoryPoints: 10, boardMode: 'balanced' });
+        expect(emLobby[0]?.settings).toEqual({
+          targetVictoryPoints: 10,
+          boardMode: 'balanced',
+          turnSeconds: null,
+        });
         expect(emLobby[0]?.seats).toHaveLength(3);
       });
 
@@ -251,6 +255,76 @@ export function contratoDeStore(nome: string, criar: () => Promise<Store>): void
 
       it('sala sem ação nenhuma devolve lista vazia', async () => {
         expect(await store.loadActionsAfter(SALA_ID, 0)).toEqual([]);
+      });
+    });
+
+    describe('resultados', () => {
+      beforeEach(async () => {
+        await comJogadores();
+        await store.saveRoom(sala({ status: 'finished' }));
+      });
+
+      /** O placar como `scoreboard()` do motor o devolve. */
+      function placar(): StoredResult {
+        return {
+          roomId: SALA_ID,
+          winnerId: JOGADORES[0]!.id,
+          scores: Object.fromEntries(
+            JOGADORES.map((j, i) => [
+              j.id,
+              {
+                settlements: 3 - i,
+                cities: 4,
+                largestArmy: i === 0 ? 2 : 0,
+                longestRoad: 0,
+                devCards: i === 0 ? 1 : 0,
+                total: 3 - i + 4 + (i === 0 ? 3 : 0),
+              },
+            ]),
+          ),
+          turns: 47,
+          durationSeconds: 3600,
+        };
+      }
+
+      it('partida sem resultado devolve indefinido', async () => {
+        expect(await store.loadResult(SALA_ID)).toBeUndefined();
+      });
+
+      it('guarda a decomposição de todos os jogadores, não só a do vencedor', async () => {
+        await store.saveResult(placar());
+
+        const guardado = await store.loadResult(SALA_ID);
+
+        expect(guardado?.winnerId).toBe(JOGADORES[0]!.id);
+        expect(guardado?.turns).toBe(47);
+        expect(guardado?.durationSeconds).toBe(3600);
+        expect(Object.keys(guardado?.scores ?? {})).toHaveLength(JOGADORES.length);
+        expect(guardado?.scores[JOGADORES[0]!.id]).toEqual(placar().scores[JOGADORES[0]!.id]);
+      });
+
+      it('regravar sobrescreve em vez de explodir', async () => {
+        // O caminho real: a jogada da vitória sendo reaplicada num replay de
+        // restauração. Derrubar a sala por causa da estatística seria perder o
+        // que importa para salvar o que não importa.
+        await store.saveResult(placar());
+        await store.saveResult({ ...placar(), turns: 99 });
+
+        expect((await store.loadResult(SALA_ID))?.turns).toBe(99);
+      });
+
+      it('aceita partida encerrada sem vencedor', async () => {
+        await store.saveResult({ ...placar(), winnerId: null });
+
+        expect((await store.loadResult(SALA_ID))?.winnerId).toBeNull();
+      });
+
+      it('apagar a sala leva o resultado junto', async () => {
+        await store.saveResult(placar());
+
+        await store.deleteRoom(SALA_ID);
+
+        expect(await store.loadResult(SALA_ID)).toBeUndefined();
       });
     });
   });

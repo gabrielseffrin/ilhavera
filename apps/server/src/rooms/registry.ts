@@ -16,7 +16,13 @@
 
 import { randomBytes, randomUUID } from 'node:crypto';
 
-import type { RoomErrorCode, RoomSettings, RoomStatus, RoomView } from '@ilhavera/protocol';
+import {
+  ajustesDoMotor,
+  type RoomErrorCode,
+  type RoomSettings,
+  type RoomStatus,
+  type RoomView,
+} from '@ilhavera/protocol';
 import { MAX_PLAYERS, MIN_PLAYERS, PLAYER_COLORS, type PlayerColor } from '@ilhavera/rules';
 
 import { GameRoom } from '../game/room.js';
@@ -54,6 +60,8 @@ export type Room = {
   game: GameRoom | null;
   createdAt: number;
   lastActivityAt: number;
+  /** Preenchido quando a partida termina. É o que `rooms.finished_at` guarda. */
+  finishedAt: number | null;
 };
 
 export type RoomResult<T> = { ok: true; value: T } | { ok: false; error: RoomErrorCode };
@@ -110,7 +118,7 @@ export class RoomRegistry {
       status: room.status,
       settings: { ...room.settings },
       createdAt: room.createdAt,
-      finishedAt: null,
+      finishedAt: room.finishedAt,
       seats: room.seats.map((s, i) => ({
         playerId: s.playerId,
         seatIndex: i,
@@ -166,6 +174,7 @@ export class RoomRegistry {
         game,
         createdAt: guardada.createdAt,
         lastActivityAt: this.#now(),
+        finishedAt: null,
       };
 
       for (const seat of room.seats) {
@@ -205,6 +214,7 @@ export class RoomRegistry {
       game: null,
       createdAt: agora,
       lastActivityAt: agora,
+      finishedAt: null,
     };
 
     this.#byCode.set(room.code, room);
@@ -335,13 +345,37 @@ export class RoomRegistry {
       id: room.id,
       seed: this.#makeSeed(),
       players: room.seats.map((s) => ({ id: s.playerId, name: s.nickname, color: s.color })),
-      settings: room.settings,
+      // Só o que é do motor: `turnSeconds` é ajuste de servidor, e entraria no
+      // `state.settings`, no snapshot JSONB e na `ClientView` sem ter o que
+      // fazer em nenhum dos três.
+      settings: ajustesDoMotor(room.settings),
       store: this.#store,
       writes: this.#writes,
       onWriteError: this.#onWriteError,
+      now: this.#now,
     });
 
     return { ok: true, value: room };
+  }
+
+  /**
+   * A partida acabou: a sala sai de `playing`.
+   *
+   * Importa mais do que parece. `restore()` só traz de volta o que está em
+   * `playing`, então uma sala que termina e não muda de status volta viva no
+   * próximo reinício do servidor — com o vencedor já decidido e ninguém para
+   * jogar. É a diferença entre um histórico e um fantasma.
+   *
+   * Idempotente: a jogada da vitória pode ser reaplicada num replay, e o
+   * segundo encerramento não pode mexer no `finishedAt` que já foi gravado.
+   */
+  finish(room: Room): void {
+    if (room.status === 'finished') return;
+
+    room.status = 'finished';
+    room.finishedAt = this.#now();
+    this.#touch(room);
+    this.#gravar(room);
   }
 
   setConnected(playerId: PlayerId, connected: boolean): Room | undefined {

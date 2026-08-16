@@ -22,6 +22,7 @@ import { useEffect, useRef } from 'react';
 import { describeEvent, type ClientView, type GameEvent } from '@ilhavera/rules';
 
 import { COR_DO_JOGADOR } from '../board/cores.js';
+import { t } from '../i18n/pt-BR.js';
 
 export type LogDeEventosProps = {
   mesa: ClientView;
@@ -45,12 +46,12 @@ export function LogDeEventos({ mesa, limite = 60 }: LogDeEventosProps): React.JS
       data-testid="log"
       className="flex min-h-0 flex-1 flex-col rounded-xl bg-slate-900/70 p-3 text-sm text-white"
     >
-      <h2 className="mb-2 font-semibold">Histórico</h2>
+      <h2 className="mb-2 font-semibold">{t.historico.titulo}</h2>
 
       <ol
         role="log"
         aria-live="polite"
-        aria-label="Histórico da partida"
+        aria-label={t.historico.rotulo}
         className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 text-xs"
       >
         {recentes.map((evento, i) => (

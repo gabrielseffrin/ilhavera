@@ -23,6 +23,7 @@ import {
   enumerateLegalActions,
   projectEvents,
   reduce,
+  scoreboard,
   toClientView,
   toClientViewDynamic,
   type Action,
@@ -41,6 +42,7 @@ import {
   WriteQueue,
   type OnWriteError,
   type Store,
+  type StoredResult,
 } from '../persistence/store.js';
 
 /**
@@ -85,6 +87,13 @@ export type GameRoomPersistence = {
   /** Compartilhada com o `RoomRegistry`: a sala precisa existir antes da ação. */
   writes?: WriteQueue;
   onWriteError?: OnWriteError;
+  /**
+   * O relógio, injetável como o do `RoomRegistry`. Serve a uma coisa só: a
+   * duração que vai para `game_results`. Nada de regra o consulta — o motor não
+   * pode saber que horas são (§4.1), e esta classe é a fronteira onde isso
+   * deixa de valer.
+   */
+  now?: () => number;
 };
 
 export type GameRoomOptions = CreateGameOptions &
@@ -101,6 +110,17 @@ export class GameRoom {
   readonly #store: Store;
   readonly #writes: WriteQueue;
   readonly #onWriteError: OnWriteError;
+  readonly #now: () => number;
+  /**
+   * Quando esta instância passou a existir.
+   *
+   * Uma partida que atravessou um reinício do servidor conta a duração a partir
+   * do reinício, e não do começo de verdade. É aproximação assumida: o número
+   * vive em `game_results` para alguém olhar depois, não para fechar conta com
+   * ninguém, e o instante exato de início custaria uma coluna em `rooms` e uma
+   * migração para uma estatística que ninguém audita.
+   */
+  readonly #startedAt: number;
 
   private constructor(state: GameState, maxRequestLog: number, persistencia: GameRoomPersistence) {
     this.#state = state;
@@ -108,14 +128,17 @@ export class GameRoom {
     this.#store = persistencia.store ?? new NullStore();
     this.#writes = persistencia.writes ?? new WriteQueue();
     this.#onWriteError = persistencia.onWriteError ?? ((): void => {});
+    this.#now = persistencia.now ?? Date.now;
+    this.#startedAt = this.#now();
   }
 
   static create(options: GameRoomOptions): GameRoom {
-    const { maxRequestLog, store, writes, onWriteError, ...criacao } = options;
+    const { maxRequestLog, store, writes, onWriteError, now, ...criacao } = options;
     const room = new GameRoom(createGame(criacao), maxRequestLog ?? MAX_REQUEST_LOG, {
       ...(store === undefined ? {} : { store }),
       ...(writes === undefined ? {} : { writes }),
       ...(onWriteError === undefined ? {} : { onWriteError }),
+      ...(now === undefined ? {} : { now }),
     });
 
     /**
@@ -187,8 +210,15 @@ export class GameRoom {
     );
   }
 
-  /** Estado completo mais as jogadas legais — o corpo do `state:snapshot`. */
-  snapshotFor(viewerId: PlayerId): SnapshotPayload {
+  /**
+   * Estado completo mais as jogadas legais — quase o corpo do `state:snapshot`.
+   *
+   * Falta o `deadline`, e falta de propósito: o prazo é do **servidor**, não da
+   * partida. Este objeto nasce só do `GameState`, e o motor não pode saber que
+   * horas são (§4.1). Quem completa é `protocol/game.ts`, que é quem tem o
+   * relógio.
+   */
+  snapshotFor(viewerId: PlayerId): Omit<SnapshotPayload, 'deadline'> {
     return { view: this.view(viewerId), legal: this.legalFor(viewerId) };
   }
 
@@ -244,6 +274,11 @@ export class GameRoom {
    * banco. **Falha de gravação não desfaz a jogada** — ela já aconteceu, e
    * mentir no ack seria pior que perder o diário. O erro é registrado e a
    * partida segue; a próxima gravação de snapshot recompõe o que se perdeu.
+   *
+   * A jogada que vence grava três coisas de uma vez: a ação, o snapshot final
+   * (porque vencer também encerra o turno) e o resultado de §7. As três na
+   * mesma passagem pela fila, porque `game_results` tem chave estrangeira para
+   * a sala e ordem importa.
    */
   async #gravarJogada(
     playerId: PlayerId,
@@ -253,16 +288,42 @@ export class GameRoom {
     const roomId = this.#state.id;
     const seq = this.#state.version;
     const fimDeTurno = events.some((e) => e.type === 'turnEnded');
+    const venceu = events.some((e) => e.type === 'gameWon');
     const estado = this.#state;
+    const resultado = venceu ? this.#resultado() : null;
 
     try {
       await this.#writes.enqueue(roomId, async () => {
         await this.#store.appendAction({ roomId, seq, playerId, action });
-        if (fimDeTurno) await this.#store.saveSnapshot({ roomId, version: seq, state: estado });
+        // Vencer encerra a partida sem passar por `turnEnded`: sem isto, o
+        // último snapshot seria o do turno anterior e o replay teria que
+        // refazer a jogada da vitória para chegar ao estado final.
+        if (fimDeTurno || venceu) {
+          await this.#store.saveSnapshot({ roomId, version: seq, state: estado });
+        }
+        if (resultado !== null) await this.#store.saveResult(resultado);
       });
     } catch (erro) {
       this.#onWriteError(erro, 'gravarJogada');
     }
+  }
+
+  /**
+   * O placar final para `game_results`.
+   *
+   * `scoreboard()` vem do motor, e é a mesma função que `toClientView` usa para
+   * montar o `finalScores` da tela de fim de partida. Recalcular aqui daria a
+   * chance de o banco e a tela discordarem sobre uma partida que já acabou —
+   * divergência que só apareceria meses depois, sem ninguém para reproduzi-la.
+   */
+  #resultado(): StoredResult {
+    return {
+      roomId: this.#state.id,
+      winnerId: this.#state.winner,
+      scores: scoreboard(this.#state),
+      turns: this.#state.turnNumber,
+      durationSeconds: Math.max(0, Math.round((this.#now() - this.#startedAt) / 1000)),
+    };
   }
 
   #gravarSnapshot(): void {

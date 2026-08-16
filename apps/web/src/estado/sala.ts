@@ -12,7 +12,7 @@
 import { createStore, useStore, type StoreApi } from 'zustand';
 
 import type { PlayerColor } from '@ilhavera/rules';
-import type { RoomView } from '@ilhavera/protocol';
+import type { RoomSettings, RoomView } from '@ilhavera/protocol';
 
 import type { Conexao } from '../rede/conexao.js';
 
@@ -27,7 +27,8 @@ export type EstadoDaSala = {
   ocupado: boolean;
 
   definirApelido: (apelido: string) => void;
-  criar: () => Promise<void>;
+  /** `settings` parcial: o zod do contrato completa o que faltar. */
+  criar: (settings?: Partial<RoomSettings>) => Promise<void>;
   entrar: (codigo: string) => Promise<void>;
   escolherCor: (cor: PlayerColor) => Promise<void>;
   iniciar: () => Promise<void>;
@@ -88,8 +89,11 @@ export function criarStoreDaSala({
         gravarApelido(apelido);
       },
 
-      criar: async () => {
-        await mandar('room:create', { nickname: get().apelido.trim() });
+      criar: async (settings) => {
+        await mandar('room:create', {
+          nickname: get().apelido.trim(),
+          ...(settings === undefined ? {} : { settings }),
+        });
       },
 
       entrar: async (codigo) => {

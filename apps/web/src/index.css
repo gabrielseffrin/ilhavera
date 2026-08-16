@@ -25,3 +25,57 @@ body {
   margin: 0;
   background-color: var(--color-mar);
 }
+
+/**
+ * `prefers-reduced-motion` — Fase 5, M6.
+ *
+ * Global e agressivo de propósito: quem pede menos movimento normalmente tem um
+ * motivo de saúde, e "quase tudo respeita a preferência" não serve. Em vez de
+ * `animation: none`, uma duração desprezível — assim o `animationend` de quem
+ * depende dele ainda dispara, e nada fica preso no estado inicial.
+ *
+ * Não alcança o `<animate>` do SVG: SMIL não é CSS. Esse caso é tratado em
+ * `board/movimento.ts`.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/**
+ * A peça entrando na mesa.
+ *
+ * Curta e sem deslocamento: uma casa que desliza de fora da tela contaria uma
+ * história falsa sobre de onde ela veio. Ela cresce no lugar em que foi
+ * construída, que é onde o olho já está.
+ */
+@keyframes peca-entrando {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+[data-assentamento],
+[data-cidade] {
+  animation: peca-entrando 220ms ease-out;
+  /* Sem isto o `scale` acontece em torno do canto do SVG, e a peça atravessa o
+     tabuleiro em vez de crescer onde está. */
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/** O Saqueador desliza: ele realmente se move de um hexágono para outro. */
+[data-saqueador] {
+  transition: transform 320ms ease-in-out;
+}

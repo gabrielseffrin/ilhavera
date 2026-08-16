@@ -3,11 +3,17 @@
 Jogo de tabuleiro multiplayer de colonização por hexágonos, jogável pelo
 navegador, para partidas privadas entre amigos.
 
-**Estado atual: Fases 0 a 4 concluídas.** Dá para jogar de verdade: três ou
+**Estado atual: Fases 0 a 5 entregues.** Dá para jogar de verdade: três ou
 quatro pessoas em máquinas diferentes entram numa sala por código e jogam do
-sorteio do tabuleiro à vitória por 10 pontos, com comércio entre jogadores e
-reconexão — quem fecha a aba volta e continua de onde parou. Falta o polimento
-(Fase 5) e o deploy (Fase 6).
+sorteio do tabuleiro à vitória por 10 pontos, com comércio entre jogadores,
+conversa na sala e reconexão — quem fecha a aba volta e continua de onde parou.
+Quem some de vez também não trava a mesa, se o anfitrião tiver ligado o relógio
+de turno.
+
+A partida é jogável **só pelo teclado**, cada jogador tem uma forma própria além
+da cor, e o fim mostra de onde veio cada ponto de cada um.
+
+Falta o playtest de usabilidade que fecha a Fase 5 — e o deploy (Fase 6).
 
 Especificação completa em [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -91,7 +97,14 @@ A suíte tem quatro camadas, na ordem em que pegam problema:
 - **replay** — o log reexecutado com a mesma semente reproduz o estado idêntico,
   em qualquer ponto da partida, não só no fim;
 - **segurança de informação** — a visão de um jogador é varrida recursivamente
-  em busca dos segredos dos outros.
+  em busca dos segredos dos outros. Inclui o placar final, que é a única coisa
+  que **deixa** de ser oculta: o teste cobre os dois lados, porque provar só que
+  ele não vaza antes passaria mesmo se ele nunca aparecesse.
+
+Duas coisas a suíte não alcança, e estão ditas assim no roadmap em vez de
+fingidas por um teste: **layout** (o jsdom não faz layout nem avalia
+`@media (orientation: …)`) e **som** (se o timbre ficou bom, alguém precisa
+ouvir).
 
 ## Jogar pelo terminal
 

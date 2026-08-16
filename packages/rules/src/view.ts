@@ -37,7 +37,7 @@ import type {
   VertexId,
 } from './types.js';
 import { countResources, playerPorts } from './query.js';
-import { victoryPoints } from './scoring/victory.js';
+import { scoreboard, victoryPoints, type VictoryBreakdown } from './scoring/victory.js';
 
 export type PublicPlayerView = {
   id: PlayerId;
@@ -89,6 +89,20 @@ export type ClientView = {
   devCardPlayedThisTurn: boolean;
   lastRoll: { dice: [number, number]; total: number } | null;
   winner: PlayerId | null;
+  /**
+   * O placar aberto, de onde veio cada ponto de cada jogador — **e `null`
+   * enquanto a partida não acabou**.
+   *
+   * É a única informação nesta projeção que deixa de ser oculta com o tempo, e
+   * por isso é a única que precisa ser lida como uma condição, não como um
+   * campo: `null` aqui não quer dizer "ainda não calculei", quer dizer "estes
+   * números continuam sendo segredo de quem os tem". Revelar as cartas de Ponto
+   * de Vitória alheias um turno antes da hora é entregar a partida.
+   *
+   * Não substitui `victoryPointsPublic`, que segue sendo o que a mesa enxerga
+   * durante o jogo. Isto é o que ela enxerga depois.
+   */
+  finalScores: Record<PlayerId, VictoryBreakdown> | null;
   log: GameEvent[];
 };
 
@@ -204,6 +218,12 @@ export function toClientViewDynamic(
     devCardPlayedThisTurn: state.devCardPlayedThisTurn,
     lastRoll: state.lastRoll === null ? null : { ...state.lastRoll },
     winner: state.winner,
+    /**
+     * A condição é `winner`, e não `phase === 'finished'`, porque é `winner`
+     * que o resto da projeção já usa para dizer que acabou — e duas condições
+     * para o mesmo fato são duas chances de uma delas mudar sozinha.
+     */
+    finalScores: state.winner === null ? null : scoreboard(state),
   };
 }
 

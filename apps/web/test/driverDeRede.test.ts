@@ -39,16 +39,30 @@ const JOGADORES = [
   { id: 'carla', name: 'Carla', color: 'white' as const },
 ];
 
-function snapshotDe(jogo: GameState, viewer: PlayerId): SnapshotPayload {
-  return { view: toClientView(jogo, viewer), legal: enumerateLegalActions(jogo, viewer) };
+function snapshotDe(
+  jogo: GameState,
+  viewer: PlayerId,
+  deadline: number | null = null,
+): SnapshotPayload {
+  return {
+    view: toClientView(jogo, viewer),
+    legal: enumerateLegalActions(jogo, viewer),
+    deadline,
+  };
 }
 
-function patchDe(jogo: GameState, viewer: PlayerId, eventos: readonly unknown[]): PatchPayload {
+function patchDe(
+  jogo: GameState,
+  viewer: PlayerId,
+  eventos: readonly unknown[],
+  deadline: number | null = null,
+): PatchPayload {
   return {
     version: jogo.version,
     events: projectEvents(eventos as never, viewer),
     view: toClientViewDynamic(jogo, viewer),
     legal: enumerateLegalActions(jogo, viewer),
+    deadline,
   };
 }
 

@@ -22,6 +22,7 @@ import {
 } from '@ilhavera/rules';
 
 import { COR_DO_JOGADOR } from '../board/cores.js';
+import { t } from '../i18n/pt-BR.js';
 
 export type PainelDaPropostaProps = {
   mesa: ClientView;
@@ -77,9 +78,15 @@ export function PainelDaProposta({
           return (
             <li key={alvo} data-alvo={alvo} data-resposta={resposta?.type ?? 'aguardando'}>
               <span className="text-white/70">{nome(mesa, alvo)}: </span>
-              {resposta === undefined && <span className="text-white/50">aguardando</span>}
-              {resposta?.type === 'accept' && <span className="text-emerald-300">aceitou</span>}
-              {resposta?.type === 'decline' && <span className="text-red-300">recusou</span>}
+              {resposta === undefined && (
+                <span className="text-white/70">{t.troca.aguardando}</span>
+              )}
+              {resposta?.type === 'accept' && (
+                <span className="text-emerald-300">{t.troca.aceitou}</span>
+              )}
+              {resposta?.type === 'decline' && (
+                <span className="text-red-300">{t.troca.recusou}</span>
+              )}
               {resposta?.type === 'counter' && (
                 <span className="text-amber-300">
                   contrapôs: {describeResources(resposta.terms.give)} por{' '}

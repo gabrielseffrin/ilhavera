@@ -11,9 +11,13 @@
  * ele o `overflow-y-auto` do histórico não segura nada e a página inteira cresce
  * até empurrar o tabuleiro para fora da tela — é o tropeço clássico de flexbox
  * aninhado, e custa caro descobrir depois.
+ *
+ * A divisão entre tabuleiro e coluna é decidida por **orientação**, e não por
+ * largura. Ver `PainelLateral` para o porquê: `lg:` mede pixels, e o que decide
+ * se as duas coisas cabem lado a lado é o formato da tela.
  */
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PHASE_LABELS, type Action, type ClientView } from '@ilhavera/rules';
 
 import { rotuloDeErro } from '../rede/erros.js';
@@ -23,11 +27,15 @@ import { CamadaInterativa } from '../board/CamadaInterativa.js';
 import { Pecas } from '../board/Pecas.js';
 import { Tabuleiro } from '../board/Tabuleiro.js';
 import { BarraDeAcoes } from '../hud/BarraDeAcoes.js';
+import { BotaoDeSom } from '../hud/BotaoDeSom.js';
+import { Cronometro } from '../hud/Cronometro.js';
 import { FimDePartida } from '../hud/FimDePartida.js';
 import { Modais } from '../hud/Modais.js';
 import { PainelDaProposta } from '../hud/PainelDaProposta.js';
-import { PainelLateral } from '../hud/PainelLateral.js';
+import { ID_DO_PAINEL_LATERAL, PainelLateral } from '../hud/PainelLateral.js';
 import { useInterface, usePartida, useSala } from '../estado/contexto.js';
+import { useSons } from '../som/useSons.js';
+import { t } from '../i18n/pt-BR.js';
 
 export function Partida({ mesa }: { mesa: ClientView }): React.JSX.Element {
   const modo = usePartida((s) => s.modo);
@@ -38,6 +46,7 @@ export function Partida({ mesa }: { mesa: ClientView }): React.JSX.Element {
   const reiniciar = usePartida((s) => s.reiniciar);
   const limparErro = usePartida((s) => s.limparErro);
   const minhasJogadas = usePartida((s) => s.minhasJogadas);
+  const prazo = usePartida((s) => s.prazo);
   const sair = useSala((s) => s.sair);
 
   const modalAberto = useInterface((s) => s.modalAberto);
@@ -62,6 +71,20 @@ export function Partida({ mesa }: { mesa: ClientView }): React.JSX.Element {
     fechar();
   }, [minhasJogadas, fechar]);
 
+  /**
+   * A coluna de informação, aberta ou recolhida — e **só em retrato**, onde ela
+   * está por cima do tabuleiro na vertical. Estado local porque não é da
+   * partida: nenhum outro cliente precisa saber que este aqui escondeu o log.
+   */
+  const [painelAberto, setPainelAberto] = useState(true);
+
+  /**
+   * Os sons saem daqui e de mais lugar nenhum: o gatilho é o log projetado que
+   * já chega no patch, então nenhum componente abaixo precisou aprender que
+   * existe áudio.
+   */
+  useSons(mesa, ativo);
+
   const cores = useMemo(
     () => Object.fromEntries(mesa.players.map((p) => [p.id, p.color])),
     [mesa.players],
@@ -83,16 +106,37 @@ export function Partida({ mesa }: { mesa: ClientView }): React.JSX.Element {
   };
 
   return (
-    <main className="flex h-full flex-col gap-3 p-4">
-      <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <h1 className="text-xl font-semibold text-white drop-shadow">Ilhavera</h1>
+    <main className="flex h-full flex-col gap-2 p-2 sm:gap-3 sm:p-4">
+      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 sm:gap-x-4">
+        <h1 className="text-lg font-semibold text-white drop-shadow sm:text-xl">{t.jogo.nome}</h1>
         <span className="text-sm text-white/80">
-          {modo === 'hot-seat' ? 'hot-seat local' : (mesa.you?.name ?? 'espectador')}
+          {modo === 'hot-seat' ? t.partida.hotSeat : (mesa.you?.name ?? t.partida.espectador)}
         </span>
 
         <span className="ml-auto text-sm text-white/90">
-          {PHASE_LABELS[mesa.phase]} · turno {mesa.turnNumber}
+          {PHASE_LABELS[mesa.phase]} · {t.partida.turno(mesa.turnNumber)}
         </span>
+
+        {/* Só existe em sala com relógio, que não é o padrão. */}
+        {mesa.winner === null && <Cronometro prazo={prazo} />}
+
+        <BotaoDeSom />
+
+        {/* Só em retrato: em paisagem a coluna está ao lado e não disputa
+            espaço com o tabuleiro, então recolhê-la não compraria nada. */}
+        <button
+          type="button"
+          data-testid="alternar-painel"
+          aria-expanded={painelAberto}
+          aria-controls={ID_DO_PAINEL_LATERAL}
+          onClick={() => {
+            setPainelAberto((antes) => !antes);
+          }}
+          className="hidden rounded-lg bg-white/20 px-3 py-1 text-sm text-white transition hover:bg-white/30 portrait:inline-flex"
+        >
+          {painelAberto ? t.partida.ocultarPainel : t.partida.mostrarPainel}
+        </button>
+
         {/* Em rede não se sorteia outra partida: a mesa é dos outros também. */}
         <button
           type="button"
@@ -102,19 +146,31 @@ export function Partida({ mesa }: { mesa: ClientView }): React.JSX.Element {
           }}
           className="rounded-lg bg-white/20 px-3 py-1 text-sm text-white transition hover:bg-white/30"
         >
-          {modo === 'hot-seat' ? 'Nova partida' : 'Sair da sala'}
+          {modo === 'hot-seat' ? t.partida.novaPartida : t.partida.sairDaSala}
         </button>
       </header>
 
       <FimDePartida mesa={mesa} />
 
+      {/**
+       * `assertive`, ao contrário do histórico e do chat, que são `polite`.
+       * É a diferença entre "aconteceu alguma coisa" e "é a sua vez": esperar o
+       * leitor de tela terminar de narrar o turno alheio para só então avisar
+       * que a mesa está parada esperando por você é o anúncio chegar tarde.
+       */}
       {jogador !== undefined && mesa.winner === null && (
-        <p className="text-sm text-white" data-testid="vez-de" data-sou-eu={souEu}>
-          Vez de <strong>{souEu ? 'você' : jogador.name}</strong>
+        <p
+          className="text-sm text-white"
+          data-testid="vez-de"
+          data-sou-eu={souEu}
+          role="status"
+          aria-live="assertive"
+        >
+          {t.partida.vezDe} <strong>{souEu ? t.partida.voce : jogador.name}</strong>
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 sm:gap-3 landscape:flex-row">
         <section className="flex min-h-0 flex-1 flex-col gap-2">
           <div className="min-h-0 flex-1">
             <Tabuleiro estado={mesa}>
@@ -159,7 +215,7 @@ export function Partida({ mesa }: { mesa: ClientView }): React.JSX.Element {
           )}
         </section>
 
-        <PainelLateral mesa={mesa} ativo={ativo}>
+        <PainelLateral mesa={mesa} ativo={ativo} aberto={painelAberto}>
           <PainelDaProposta
             mesa={mesa}
             legais={legais}

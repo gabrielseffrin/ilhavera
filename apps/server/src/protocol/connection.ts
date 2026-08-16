@@ -10,7 +10,8 @@ import type { FastifyBaseLogger } from 'fastify';
 
 import type { PlayerDirectory } from '../identity/players.js';
 import type { RoomRegistry } from '../rooms/registry.js';
-import { emitSnapshotTo, registerGameCommands } from './game.js';
+import { registerChatCommands } from './chat.js';
+import { emitSnapshotTo, registerGameCommands, type GameDeps } from './game.js';
 import { RateLimiter, type RateLimitOptions } from './rate-limit.js';
 import { broadcastRoom, registerRoomCommands } from './rooms.js';
 import type { GameServer } from './types.js';
@@ -20,10 +21,12 @@ export type HandlerDeps = {
   rooms: RoomRegistry;
   log: FastifyBaseLogger;
   rateLimit: RateLimitOptions;
+  /** O relógio de turno, quando a sala tiver um. Ver `game/timer.ts`. */
+  timer?: GameDeps['timer'];
 };
 
 export function registerHandlers(io: GameServer, deps: HandlerDeps): void {
-  const { players, rooms, log, rateLimit } = deps;
+  const { players, rooms, log, rateLimit, timer } = deps;
 
   /**
    * Handshake: quem chega com token válido volta a ser quem era; quem chega sem
@@ -76,13 +79,15 @@ export function registerHandlers(io: GameServer, deps: HandlerDeps): void {
       broadcastRoom(io, anterior);
       // Quem volta no meio de uma partida precisa do estado inteiro; os outros
       // já o têm, então isto vai só para esta conexão.
-      emitSnapshotTo(socket, anterior);
+      emitSnapshotTo(socket, anterior, timer);
     }
 
     log.debug({ socketId: socket.id, playerId: dados.playerId }, 'socket conectado');
 
-    registerRoomCommands(socket, { io, players, rooms, log });
-    registerGameCommands(socket, { io, rooms, log });
+    const comTimer = timer === undefined ? {} : { timer };
+    registerRoomCommands(socket, { io, players, rooms, log, ...comTimer });
+    registerGameCommands(socket, { io, rooms, log, ...comTimer });
+    registerChatCommands(socket, { io, rooms, log });
 
     socket.on('disconnect', (reason) => {
       const room = rooms.setConnected(dados.playerId, false);

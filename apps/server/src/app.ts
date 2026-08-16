@@ -9,9 +9,11 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { Server as IOServer } from 'socket.io';
 
 import type { Config } from './config.js';
+import { INTERVALO_DA_VARREDURA, TurnTimer } from './game/timer.js';
 import { PlayerDirectory } from './identity/players.js';
 import { NullStore, WriteQueue, type Store } from './persistence/store.js';
 import { registerHandlers } from './protocol/connection.js';
+import { aplicarJogada } from './protocol/game.js';
 import type { GameServer } from './protocol/types.js';
 import { RoomRegistry, type RoomRegistryOptions } from './rooms/registry.js';
 
@@ -22,6 +24,8 @@ export type AppServer = {
   readonly io: GameServer;
   readonly players: PlayerDirectory;
   readonly rooms: RoomRegistry;
+  /** O relógio de turno. Exposto para o teste poder adiantá-lo sem esperar. */
+  readonly timer: TurnTimer;
   /** Sobe e devolve o endereço real — que difere do pedido quando `PORT` é 0. */
   listen(): Promise<Address>;
   /** Identidades e partidas em andamento de volta do banco. Chamado por `listen`. */
@@ -34,6 +38,17 @@ export type BuildOptions = {
   registry?: RoomRegistryOptions;
   /** Sem loja, o servidor sobe e joga — só não sobrevive ao próprio reinício. */
   store?: Store;
+  /**
+   * Relógio do timer de turno, injetável. O teste avança o tempo na mão e chama
+   * `timer.tick()`, em vez de esperar trinta segundos de verdade.
+   */
+  now?: () => number;
+  /**
+   * Liga a varredura periódica. Desligada nos testes, que chamam `tick()`
+   * diretamente — um `setInterval` vivo atravessaria o fim do caso e cutucaria
+   * um servidor já fechado.
+   */
+  varrer?: boolean;
 };
 
 export function buildServer(config: Config, options: BuildOptions = {}): AppServer {
@@ -91,6 +106,39 @@ export function buildServer(config: Config, options: BuildOptions = {}): AppServ
     rooms: rooms.size,
   }));
 
+  /**
+   * O relógio de turno. Só faz alguma coisa em sala com `turnSeconds`, que é
+   * `null` por padrão — então numa instalação normal ele existe e nunca dispara.
+   *
+   * `jogar` é injetado com o mesmo `aplicarJogada` da borda de socket: a jogada
+   * automática percorre a fila, a idempotência, a persistência e a emissão que
+   * qualquer jogada humana percorre. Nada aqui é atalho.
+   */
+  const timer: TurnTimer = new TurnTimer({
+    rooms,
+    log: fastify.log,
+    ...(options.now === undefined ? {} : { now: options.now }),
+    jogar: async (room, playerId, action) => {
+      await aplicarJogada(
+        { io, rooms, log: fastify.log, timer },
+        room,
+        playerId,
+        timer.proximoRequestId(),
+        action,
+      );
+    },
+  });
+
+  const varredura =
+    options.varrer === false
+      ? null
+      : setInterval(() => {
+          void timer.tick();
+        }, INTERVALO_DA_VARREDURA);
+  // Sem isto, um servidor ocioso segura o processo Node vivo só por causa da
+  // varredura — e o `pnpm dev` deixa de encerrar com Ctrl+C.
+  varredura?.unref();
+
   registerHandlers(io, {
     players,
     rooms,
@@ -99,6 +147,7 @@ export function buildServer(config: Config, options: BuildOptions = {}): AppServ
       capacity: config.RATE_LIMIT_BURST,
       refillPerSecond: config.RATE_LIMIT_PER_SECOND,
     },
+    timer,
   });
 
   /** Rede de segurança para quem chamar `fastify.close()` sem passar por `close()`. */
@@ -113,6 +162,7 @@ export function buildServer(config: Config, options: BuildOptions = {}): AppServ
     io,
     players,
     rooms,
+    timer,
 
     async restore(): Promise<void> {
       await players.restore();
@@ -141,6 +191,7 @@ export function buildServer(config: Config, options: BuildOptions = {}): AppServ
     async close(): Promise<void> {
       // Antes de `fastify.close()`, não dentro do hook: quando o hook roda, o
       // servidor HTTP já está drenando e a conexão aberta já o está segurando.
+      if (varredura !== null) clearInterval(varredura);
       io.local.disconnectSockets(true);
       io.engine.close();
       await fastify.close();

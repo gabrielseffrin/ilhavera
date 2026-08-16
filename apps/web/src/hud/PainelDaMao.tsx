@@ -20,6 +20,7 @@ import {
 } from '@ilhavera/rules';
 
 import { COR_DO_RECURSO } from '../board/cores.js';
+import { t } from '../i18n/pt-BR.js';
 
 export type PainelDaMaoProps = {
   voce: SelfPlayerView | null;
@@ -62,9 +63,9 @@ export function PainelDaMao({ voce, turno }: PainelDaMaoProps): React.JSX.Elemen
         ))}
       </ul>
 
-      <h3 className="mt-3 mb-1 text-xs font-semibold text-white/70">Cartas de Progresso</h3>
+      <h3 className="mt-3 mb-1 text-xs font-semibold text-white/70">{t.mao.cartasDeProgresso}</h3>
       {cartas.length === 0 ? (
-        <p className="text-xs text-white/50">nenhuma</p>
+        <p className="text-xs text-white/70">{t.mao.nenhuma}</p>
       ) : (
         <ul className="flex flex-wrap gap-1.5">
           {cartas.map((c, i) => {
@@ -74,12 +75,15 @@ export function PainelDaMao({ voce, turno }: PainelDaMaoProps): React.JSX.Elemen
                 key={`${c.card}-${i}`}
                 data-carta={c.card}
                 data-travada={travada}
+                /* Carta travada é a que não dá para jogar hoje, e isso se diz
+                   por escrito ao lado. Apagá-la até o texto sumir seria
+                   esconder a informação em vez de qualificá-la. */
                 className={`rounded-lg px-2 py-1 text-xs ${
-                  travada ? 'bg-white/10 text-white/50' : 'bg-white/90 text-slate-900'
+                  travada ? 'bg-white/10 text-white/70' : 'bg-white/90 text-slate-900'
                 }`}
               >
                 {DEV_CARD_LABELS[c.card]}
-                {travada && <span className="ml-1">· comprada neste turno</span>}
+                {travada && <span className="ml-1">{t.mao.compradaNesteTurno}</span>}
               </li>
             );
           })}
@@ -87,8 +91,8 @@ export function PainelDaMao({ voce, turno }: PainelDaMaoProps): React.JSX.Elemen
       )}
 
       <p className="mt-3 text-xs text-white/70">
-        <span className="font-semibold">Portos:</span>{' '}
-        {voce.ports.length === 0 ? 'nenhum' : voce.ports.map(nomeDoPorto).join(', ')}
+        <span className="font-semibold">{t.mao.portos}</span>{' '}
+        {voce.ports.length === 0 ? t.mao.nenhum : voce.ports.map(nomeDoPorto).join(', ')}
       </p>
     </section>
   );

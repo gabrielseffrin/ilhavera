@@ -36,6 +36,29 @@ import type { GameEvent, GameState } from '../src/state.js';
 import type { PlayerId } from '../src/types.js';
 import type { ClientView } from '../src/view.js';
 
+/**
+ * Todo objeto no JSON com a forma de um `VictoryBreakdown`.
+ *
+ * Busca por forma, e não pelo nome do campo, porque o que se quer garantir não é
+ * "não existe uma chave chamada `finalScores`" — é "a decomposição dos pontos não
+ * está alcançável por caminho nenhum". Um campo novo publicando a mesma coisa
+ * com outro nome cai aqui do mesmo jeito.
+ */
+function decomposicoes(value: unknown, out: unknown[] = []): unknown[] {
+  if (value === null || typeof value !== 'object') return out;
+  if (Array.isArray(value)) {
+    for (const item of value) decomposicoes(item, out);
+    return out;
+  }
+
+  const chaves = Object.keys(value);
+  const assinatura = ['settlements', 'cities', 'largestArmy', 'longestRoad', 'devCards', 'total'];
+  if (assinatura.every((c) => chaves.includes(c))) out.push(value);
+
+  for (const v of Object.values(value)) decomposicoes(v, out);
+  return out;
+}
+
 /** Percorre o JSON e devolve todos os valores primitivos encontrados. */
 function todosOsValores(value: unknown, out: unknown[] = []): unknown[] {
   if (value === null || value === undefined) return out;
@@ -153,6 +176,94 @@ describe('toClientView: informação oculta', () => {
     for (const p of view.players) {
       expect(p).not.toHaveProperty('resources');
     }
+  });
+});
+
+/**
+ * O placar aberto é a única coisa nesta projeção que **deixa** de ser oculta, e
+ * por isso precisa dos dois lados testados. Um teste que só prova "não vaza
+ * antes" passa mesmo se o placar nunca aparecer; um que só prova "aparece
+ * depois" passa mesmo se aparecer o tempo todo. Nenhum dos dois sozinho diz o
+ * que se quer saber.
+ */
+describe('toClientView: o placar aberto do fim de partida', () => {
+  /** Bruno com duas cartas de PV na mão — os pontos que ninguém enxerga. */
+  function mesaComPVOculto(): GameState {
+    let s = completeSetup(newGame());
+    s = giveDevCard(s, 'bruno', 'victoryPoint');
+    s = giveDevCard(s, 'bruno', 'victoryPoint');
+    return s;
+  }
+
+  function comVencedor(s: GameState): GameState {
+    return patch(s, (draft) => {
+      draft.winner = 'bruno';
+      draft.phase = 'finished';
+    });
+  }
+
+  it('não existe enquanto não há vencedor', () => {
+    const view = toClientView(mesaComPVOculto(), 'ana');
+
+    expect(view.winner).toBeNull();
+    expect(view.finalScores).toBeNull();
+  });
+
+  it('com a partida em curso, nenhuma decomposição de PV é alcançável', () => {
+    const s = mesaComPVOculto();
+    const view = toClientView(s, 'ana');
+
+    const publico = view.players.find((p) => p.id === 'bruno')!.victoryPointsPublic;
+    expect(victoryPoints(s, 'bruno', true).total).toBe(publico + 2);
+
+    /**
+     * A varredura aqui é por **forma**, não por valor: um total de PV é um
+     * inteiro pequeno que aparece legitimamente às centenas no JSON do
+     * tabuleiro, então procurar pelo número não prova nada. Procurar por um
+     * objeto com a cara de `VictoryBreakdown` prova — e continua provando se
+     * alguém publicar a decomposição por um campo de nome diferente.
+     */
+    expect(decomposicoes(view)).toHaveLength(0);
+  });
+
+  it('com vencedor, revela de onde veio cada ponto de cada jogador', () => {
+    const s = comVencedor(mesaComPVOculto());
+    const view = toClientView(s, 'ana');
+
+    expect(view.finalScores).not.toBeNull();
+    expect(Object.keys(view.finalScores!).sort()).toEqual([...s.players.map((p) => p.id)].sort());
+    // Uma decomposição por jogador, e nenhuma a mais escondida noutro canto.
+    expect(decomposicoes(view)).toHaveLength(s.players.length);
+
+    const bruno = view.finalScores!['bruno']!;
+    expect(bruno.devCards).toBe(2);
+    expect(bruno.total).toBe(victoryPoints(s, 'bruno', true).total);
+    // A decomposição precisa fechar com o total, senão a tabela da tela conta
+    // uma história que não soma.
+    expect(
+      bruno.settlements + bruno.cities + bruno.largestArmy + bruno.longestRoad + bruno.devCards,
+    ).toBe(bruno.total);
+  });
+
+  it('revela o placar e **só** o placar: a mão de recursos continua oculta', () => {
+    let s = mesaComPVOculto();
+    for (const p of s.players) s = clearHand(s, p.id);
+    s = grant(s, 'bruno', { ore: 90013, wool: 90017 });
+    s = comVencedor(s);
+
+    const view = toClientView(s, 'ana');
+    const valores = todosOsValores(JSON.parse(JSON.stringify(view)));
+
+    expect(view.finalScores).not.toBeNull();
+    expect(valores).not.toContain(90013);
+    expect(valores).not.toContain(90017);
+    expect(view.players.find((p) => p.id === 'bruno')!).not.toHaveProperty('resources');
+  });
+
+  it('o espectador vê o mesmo placar — no fim não há mais o que esconder', () => {
+    const s = comVencedor(mesaComPVOculto());
+
+    expect(toClientView(s, null).finalScores).toEqual(toClientView(s, 'ana').finalScores);
   });
 });
 
