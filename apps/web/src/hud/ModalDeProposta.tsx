@@ -24,6 +24,7 @@ import {
 } from '@ilhavera/rules';
 
 import { COR_DO_JOGADOR } from '../board/cores.js';
+import { Botao } from './base/Botao.js';
 import { ContadorDeRecursos } from './ContadorDeRecursos.js';
 import { Modal } from './Modal.js';
 import { t } from '../i18n/pt-BR.js';
@@ -76,6 +77,7 @@ export function ModalDeProposta({
           <h3 className="text-sm font-medium text-white/80">{t.troca.voceOferece}</h3>
           <ContadorDeRecursos
             id="ofereco"
+            escopo="ofereco"
             valor={ofereco}
             aoMudar={setOfereco}
             limite={(r) => voce.resources[r]}
@@ -85,7 +87,7 @@ export function ModalDeProposta({
 
         <section className="flex flex-col gap-2">
           <h3 className="text-sm font-medium text-white/80">{t.troca.vocePede}</h3>
-          <ContadorDeRecursos id="peco" valor={peco} aoMudar={setPeco} />
+          <ContadorDeRecursos id="peco" escopo="peco" valor={peco} aoMudar={setPeco} />
         </section>
       </div>
 
@@ -129,16 +131,16 @@ export function ModalDeProposta({
         <span className="text-sm text-white/70 tabular-nums">
           {totalOferecido} por {totalPedido}
         </span>
-        <button
-          type="button"
+        <Botao
+          tom="primario"
           disabled={!podeEnviar}
           onClick={() => {
             aoConfirmar({ give: ofereco, receive: peco }, escolhidos);
           }}
-          className="ml-auto rounded-lg bg-white/95 px-3 py-2 text-sm font-medium text-slate-900 shadow transition hover:bg-white disabled:opacity-40"
+          className="ml-auto px-3 py-2 text-sm font-medium shadow"
         >
           {rotuloDoBotao}
-        </button>
+        </Botao>
       </div>
     </Modal>
   );

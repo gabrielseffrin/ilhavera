@@ -20,15 +20,14 @@ import { useState } from 'react';
 
 import {
   RESOURCES,
-  RESOURCE_LABELS,
   emptyResourceCount,
   type Action,
-  type Resource,
   type ResourceCount,
   type SelfPlayerView,
 } from '@ilhavera/rules';
 
-import { COR_DO_RECURSO } from '../board/cores.js';
+import { Botao } from './base/Botao.js';
+import { ContadorDeRecursos } from './ContadorDeRecursos.js';
 import { Modal } from './Modal.js';
 
 export type ModalDescarteProps = {
@@ -51,61 +50,23 @@ export function ModalDescarte({
   const somado = RESOURCES.reduce((soma, r) => soma + escolha[r], 0);
   const completo = somado === total;
 
-  const mexer = (r: Resource, delta: number): void => {
-    setEscolha((atual) => {
-      const proximo = { ...atual };
-      // Nem abaixo de zero, nem além do que se tem, nem além do que se deve.
-      const limite = Math.min(voce.resources[r], atual[r] + (total - somado));
-      proximo[r] = Math.max(0, Math.min(limite, atual[r] + delta));
-      return proximo;
-    });
-  };
-
   return (
     <Modal id="descarte" titulo={`Descarte obrigatório — ${voce.name}`}>
       <p className="text-sm text-white/70">
         Saiu 7. Escolha exatamente <strong>{total}</strong> cartas para devolver ao banco.
       </p>
 
-      <ul className="flex flex-col gap-1.5">
-        {RESOURCES.map((r) => (
-          <li key={r} data-descarte={r} className="flex items-center gap-2">
-            <span
-              className="w-24 rounded-lg px-2 py-1 text-xs font-medium text-slate-900"
-              style={{ backgroundColor: COR_DO_RECURSO[r] }}
-            >
-              {RESOURCE_LABELS[r]}
-            </span>
-            <span className="w-16 text-xs text-white/60">tem {voce.resources[r]}</span>
-
-            <button
-              type="button"
-              aria-label={`menos ${RESOURCE_LABELS[r]}`}
-              disabled={escolha[r] === 0}
-              onClick={() => {
-                mexer(r, -1);
-              }}
-              className="h-7 w-7 rounded-lg bg-white/10 transition hover:bg-white/20 disabled:opacity-30"
-            >
-              −
-            </button>
-            <strong data-qtd={escolha[r]} className="w-6 text-center tabular-nums">
-              {escolha[r]}
-            </strong>
-            <button
-              type="button"
-              aria-label={`mais ${RESOURCE_LABELS[r]}`}
-              disabled={escolha[r] >= voce.resources[r] || completo}
-              onClick={() => {
-                mexer(r, 1);
-              }}
-              className="h-7 w-7 rounded-lg bg-white/10 transition hover:bg-white/20 disabled:opacity-30"
-            >
-              +
-            </button>
-          </li>
-        ))}
-      </ul>
+      {/* Sem `escopo`: é o único contador da tela, e "mais Lã em descarte" só
+          faria o leitor de tela ler um desambiguador que não desambigua nada.
+          O teto por recurso é o que se tem; o teto da soma é o `cheio`. */}
+      <ContadorDeRecursos
+        id="descarte"
+        valor={escolha}
+        aoMudar={setEscolha}
+        limite={(r) => voce.resources[r]}
+        legenda={(r) => `tem ${voce.resources[r]}`}
+        cheio={completo}
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <span data-testid="contador-descarte" className="text-sm tabular-nums text-white/80">
@@ -113,27 +74,27 @@ export function ModalDescarte({
         </span>
 
         {automatico !== undefined && (
-          <button
-            type="button"
+          <Botao
+            tom="discreto"
             onClick={() => {
               if (automatico.type === 'discard') aoConfirmar(automatico.resources);
             }}
-            className="rounded-lg bg-white/10 px-3 py-2 text-sm transition hover:bg-white/20"
+            className="px-3 py-2 text-sm"
           >
             Descartar automático
-          </button>
+          </Botao>
         )}
 
-        <button
-          type="button"
+        <Botao
+          tom="primario"
           disabled={!completo}
           onClick={() => {
             aoConfirmar(escolha);
           }}
-          className="ml-auto rounded-lg bg-white/95 px-3 py-2 text-sm font-medium text-slate-900 shadow transition hover:bg-white disabled:opacity-40"
+          className="ml-auto px-3 py-2 text-sm font-medium shadow"
         >
           Descartar
-        </button>
+        </Botao>
       </div>
     </Modal>
   );

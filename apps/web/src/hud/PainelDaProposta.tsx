@@ -22,6 +22,7 @@ import {
 } from '@ilhavera/rules';
 
 import { COR_DO_JOGADOR } from '../board/cores.js';
+import { Botao } from './base/Botao.js';
 import { t } from '../i18n/pt-BR.js';
 
 export type PainelDaPropostaProps = {
@@ -103,43 +104,43 @@ export function PainelDaProposta({
           {respostas
             .filter((a) => a.response.type === 'accept' || a.response.type === 'decline')
             .map((acao) => (
-              <button
+              <Botao
                 key={acao.response.type}
-                type="button"
+                tom="primario"
                 data-resposta={acao.response.type}
                 onClick={() => {
                   aoEscolher(acao);
                 }}
-                className="rounded-lg bg-white/95 px-3 py-1.5 font-medium text-slate-900 transition hover:bg-white"
+                className="px-3 py-1.5 font-medium"
               >
                 {acao.response.type === 'accept' ? 'Aceitar' : 'Recusar'}
-              </button>
+              </Botao>
             ))}
-          <button
-            type="button"
+          <Botao
+            tom="discreto"
             data-resposta="counter"
             onClick={aoContrapor}
-            className="rounded-lg bg-white/10 px-3 py-1.5 transition hover:bg-white/20"
+            className="px-3 py-1.5"
           >
             Contrapor
-          </button>
+          </Botao>
         </div>
       )}
 
       {fechamentos.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {fechamentos.map((acao) => (
-            <button
+            <Botao
               key={acao.withPlayer}
-              type="button"
+              tom="afirmativo"
               data-fechar-com={acao.withPlayer}
               onClick={() => {
                 aoEscolher(acao);
               }}
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 font-medium text-white transition hover:bg-emerald-500"
+              className="px-3 py-1.5 font-medium"
             >
               Fechar com {nome(mesa, acao.withPlayer)}
-            </button>
+            </Botao>
           ))}
         </div>
       )}

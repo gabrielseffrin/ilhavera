@@ -22,6 +22,7 @@ import { useEffect, useRef } from 'react';
 import { describeEvent, type ClientView, type GameEvent } from '@ilhavera/rules';
 
 import { COR_DO_JOGADOR } from '../board/cores.js';
+import { Cartao } from './base/Cartao.js';
 import { t } from '../i18n/pt-BR.js';
 
 export type LogDeEventosProps = {
@@ -42,10 +43,7 @@ export function LogDeEventos({ mesa, limite = 60 }: LogDeEventosProps): React.JS
   const recentes = mesa.log.slice(inicio);
 
   return (
-    <section
-      data-testid="log"
-      className="flex min-h-0 flex-1 flex-col rounded-xl bg-slate-900/70 p-3 text-sm text-white"
-    >
+    <Cartao data-testid="log" className="flex min-h-0 flex-1 flex-col">
       <h2 className="mb-2 font-semibold">{t.historico.titulo}</h2>
 
       <ol
@@ -66,7 +64,7 @@ export function LogDeEventos({ mesa, limite = 60 }: LogDeEventosProps): React.JS
           </li>
         ))}
       </ol>
-    </section>
+    </Cartao>
   );
 }
 

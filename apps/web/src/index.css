@@ -5,7 +5,22 @@
  * Só o que não cabe em classe utilitária mora aqui.
  */
 
+/**
+ * Tokens.
+ *
+ * Os de terreno e recurso vieram da Fase 3; os de interface são da 5.5. A
+ * separação importa: os primeiros descrevem o **jogo** e são consumidos também
+ * pelo SVG do tabuleiro via `board/cores.ts`; os segundos descrevem a **casca**
+ * e só existem para as primitivas de `hud/base/`.
+ *
+ * Os tokens de casca apontam para a paleta do Tailwind em vez de repetir um
+ * `oklch` literal. Uma cor copiada à mão diverge no dia em que alguém ajusta um
+ * dos lados, e a única forma de descobrir seria olhando as duas telas lado a
+ * lado. Assim a superfície continua sendo exatamente `slate-900`, e o CSS
+ * gerado não muda.
+ */
 @theme {
+  /* ——— jogo ——— */
   --color-mar: oklch(0.62 0.13 236);
   --color-madeira: oklch(0.45 0.09 145);
   --color-tijolo: oklch(0.58 0.14 40);
@@ -13,6 +28,19 @@
   --color-trigo: oklch(0.85 0.13 90);
   --color-minerio: oklch(0.55 0.03 260);
   --color-deserto: oklch(0.84 0.05 85);
+
+  /* ——— casca: superfícies ——— */
+  --color-superficie: var(--color-slate-900);
+  --color-superficie-forte: var(--color-white);
+  --color-perigo: var(--color-red-950);
+  --color-perigo-texto: var(--color-red-50);
+  --color-acao: var(--color-emerald-600);
+  --color-acao-forte: var(--color-emerald-500);
+
+  /* ——— casca: forma ——— */
+  --radius-controle: 0.5rem; /* botão, chip, campo */
+  --radius-cartao: 0.75rem; /* painel da HUD */
+  --radius-folha: 1rem; /* cartão de tela cheia e diálogo */
 }
 
 html,

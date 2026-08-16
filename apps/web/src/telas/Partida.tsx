@@ -26,6 +26,8 @@ import { CamadaDoSaqueador } from '../board/CamadaDoSaqueador.js';
 import { CamadaInterativa } from '../board/CamadaInterativa.js';
 import { Pecas } from '../board/Pecas.js';
 import { Tabuleiro } from '../board/Tabuleiro.js';
+import { Alerta } from '../hud/base/Alerta.js';
+import { Botao } from '../hud/base/Botao.js';
 import { BarraDeAcoes } from '../hud/BarraDeAcoes.js';
 import { BotaoDeSom } from '../hud/BotaoDeSom.js';
 import { Cronometro } from '../hud/Cronometro.js';
@@ -124,30 +126,30 @@ export function Partida({ mesa }: { mesa: ClientView }): React.JSX.Element {
 
         {/* Só em retrato: em paisagem a coluna está ao lado e não disputa
             espaço com o tabuleiro, então recolhê-la não compraria nada. */}
-        <button
-          type="button"
+        <Botao
+          tom="secundario"
           data-testid="alternar-painel"
           aria-expanded={painelAberto}
           aria-controls={ID_DO_PAINEL_LATERAL}
           onClick={() => {
             setPainelAberto((antes) => !antes);
           }}
-          className="hidden rounded-lg bg-white/20 px-3 py-1 text-sm text-white transition hover:bg-white/30 portrait:inline-flex"
+          className="hidden px-3 py-1 text-sm portrait:inline-flex"
         >
           {painelAberto ? t.partida.ocultarPainel : t.partida.mostrarPainel}
-        </button>
+        </Botao>
 
         {/* Em rede não se sorteia outra partida: a mesa é dos outros também. */}
-        <button
-          type="button"
+        <Botao
+          tom="secundario"
           onClick={() => {
             if (modo === 'hot-seat') reiniciar();
             else void sair();
           }}
-          className="rounded-lg bg-white/20 px-3 py-1 text-sm text-white transition hover:bg-white/30"
+          className="px-3 py-1 text-sm"
         >
           {modo === 'hot-seat' ? t.partida.novaPartida : t.partida.sairDaSala}
-        </button>
+        </Botao>
       </header>
 
       <FimDePartida mesa={mesa} />
@@ -208,11 +210,7 @@ export function Partida({ mesa }: { mesa: ClientView }): React.JSX.Element {
             }}
           />
 
-          {erro !== null && (
-            <p role="alert" className="rounded-lg bg-red-950/80 px-3 py-2 text-sm text-red-50">
-              {rotuloDeErro(erro)}
-            </p>
-          )}
+          {erro !== null && <Alerta>{rotuloDeErro(erro)}</Alerta>}
         </section>
 
         <PainelLateral mesa={mesa} ativo={ativo} aberto={painelAberto}>

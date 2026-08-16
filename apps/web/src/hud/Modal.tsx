@@ -22,6 +22,7 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { Botao } from './base/Botao.js';
 import { t } from '../i18n/pt-BR.js';
 
 export type ModalProps = {
@@ -89,13 +90,9 @@ export function Modal({ titulo, id, children, aoFechar }: ModalProps): React.JSX
         <div className="flex items-baseline gap-3">
           <h2 className="text-lg font-semibold">{titulo}</h2>
           {aoFechar !== undefined && (
-            <button
-              type="button"
-              onClick={aoFechar}
-              className="ml-auto rounded-lg bg-white/10 px-2 py-1 text-sm transition hover:bg-white/20"
-            >
+            <Botao tom="discreto" onClick={aoFechar} className="ml-auto px-2 py-1 text-sm">
               {t.modal.cancelar}
-            </button>
+            </Botao>
           )}
         </div>
 

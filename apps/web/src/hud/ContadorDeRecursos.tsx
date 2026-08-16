@@ -12,8 +12,18 @@ import { RESOURCES, RESOURCE_LABELS, type Resource, type ResourceCount } from '@
 import { COR_DO_RECURSO } from '../board/cores.js';
 
 export type ContadorDeRecursosProps = {
-  /** Prefixo dos `data-` e dos rótulos, para dois contadores na mesma tela. */
+  /** Prefixo dos `data-`, para dois contadores na mesma tela. */
   id: string;
+  /**
+   * Sufixo dos rótulos ARIA, quando dois contadores dividem a tela: o
+   * compositor de troca tem "mais Lã em ofereco" e "mais Lã em peco", e sem a
+   * distinção o leitor de tela anuncia dois botões com o mesmo nome.
+   *
+   * Omitido, o rótulo é só "mais Lã" — é o caso do descarte, que é um contador
+   * sozinho num diálogo. Um escopo que não desambigua nada é ruído que o leitor
+   * de tela lê em voz alta a cada botão.
+   */
+  escopo?: string;
   valor: ResourceCount;
   aoMudar: (valor: ResourceCount) => void;
   /** O teto de cada recurso. Sem ele, o céu. */
@@ -26,6 +36,7 @@ export type ContadorDeRecursosProps = {
 
 export function ContadorDeRecursos({
   id,
+  escopo,
   valor,
   aoMudar,
   limite,
@@ -36,6 +47,11 @@ export function ContadorDeRecursos({
     const teto = limite?.(r) ?? Number.POSITIVE_INFINITY;
     aoMudar({ ...valor, [r]: Math.max(0, Math.min(teto, valor[r] + delta)) });
   };
+
+  const rotular = (acao: string, r: Resource): string =>
+    escopo === undefined
+      ? `${acao} ${RESOURCE_LABELS[r]}`
+      : `${acao} ${RESOURCE_LABELS[r]} em ${escopo}`;
 
   return (
     <ul className="flex flex-col gap-1.5" data-contador={id}>
@@ -53,7 +69,7 @@ export function ContadorDeRecursos({
 
             <button
               type="button"
-              aria-label={`menos ${RESOURCE_LABELS[r]} em ${id}`}
+              aria-label={rotular('menos', r)}
               disabled={valor[r] === 0}
               onClick={() => {
                 mexer(r, -1);
@@ -67,7 +83,7 @@ export function ContadorDeRecursos({
             </strong>
             <button
               type="button"
-              aria-label={`mais ${RESOURCE_LABELS[r]} em ${id}`}
+              aria-label={rotular('mais', r)}
               disabled={cheio || valor[r] >= (limite?.(r) ?? Number.POSITIVE_INFINITY)}
               onClick={() => {
                 mexer(r, 1);

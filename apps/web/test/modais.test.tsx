@@ -132,7 +132,7 @@ describe('modal de descarte', () => {
     // Ana tem 1 de Lã: o segundo clique não pode subir para 2.
     const mais = within(modal).getByRole('button', { name: 'mais Lã' });
     await userEvent.click(mais);
-    expect(modal.querySelector('[data-descarte="wool"] [data-qtd]')).toHaveAttribute(
+    expect(modal.querySelector('[data-recurso="wool"] [data-qtd]')).toHaveAttribute(
       'data-qtd',
       '1',
     );

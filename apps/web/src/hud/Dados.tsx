@@ -14,6 +14,7 @@
 import { useEffect, useState } from 'react';
 
 import type { ClientView } from '@ilhavera/rules';
+import { Cartao } from './base/Cartao.js';
 import { t } from '../i18n/pt-BR.js';
 
 export type DadosProps = {
@@ -37,11 +38,7 @@ export function Dados({ roll, chave }: DadosProps): React.JSX.Element {
   }, [chave]);
 
   return (
-    <section
-      data-testid="dados"
-      data-total={roll?.total ?? ''}
-      className="flex items-center gap-2 rounded-xl bg-slate-900/70 p-3 text-sm text-white"
-    >
+    <Cartao data-testid="dados" data-total={roll?.total ?? ''} className="flex items-center gap-2">
       <h2 className="font-semibold">{t.dados.titulo}</h2>
 
       {roll === null ? (
@@ -53,7 +50,7 @@ export function Dados({ roll, chave }: DadosProps): React.JSX.Element {
           <strong className="tabular-nums text-lg">{roll.total}</strong>
         </span>
       )}
-    </section>
+    </Cartao>
   );
 }
 

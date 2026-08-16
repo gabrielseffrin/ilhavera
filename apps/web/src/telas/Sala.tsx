@@ -18,6 +18,8 @@ import {
 } from '../board/cores.js';
 import { IconeDoJogador, Marca } from '../board/Marca.js';
 import { Chat } from '../hud/Chat.js';
+import { Alerta } from '../hud/base/Alerta.js';
+import { Botao } from '../hud/base/Botao.js';
 import { temChat, useCliente, useSala } from '../estado/contexto.js';
 import { rotuloDeErro } from '../rede/erros.js';
 import { t } from '../i18n/pt-BR.js';
@@ -119,16 +121,16 @@ export function Sala(): React.JSX.Element {
         </fieldset>
 
         {souHost ? (
-          <button
-            type="button"
+          <Botao
+            tom="afirmativo"
             disabled={!sala.canStart || ocupado}
             onClick={() => {
               void iniciar();
             }}
-            className="rounded-lg bg-emerald-600 px-3 py-2 text-white transition hover:bg-emerald-500 disabled:opacity-40"
+            className="px-3 py-2"
           >
             {t.sala.iniciar}
-          </button>
+          </Botao>
         ) : (
           <p className="text-sm text-white/80">{t.sala.esperandoAnfitriao}</p>
         )}
@@ -151,11 +153,7 @@ export function Sala(): React.JSX.Element {
           {t.sala.sair}
         </button>
 
-        {erro !== null && (
-          <p role="alert" className="rounded-lg bg-red-950/80 px-3 py-2 text-sm text-red-50">
-            {rotuloDeErro(erro)}
-          </p>
-        )}
+        {erro !== null && <Alerta>{rotuloDeErro(erro)}</Alerta>}
       </div>
     </main>
   );

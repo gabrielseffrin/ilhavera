@@ -16,6 +16,9 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useChat } from '../estado/contexto.js';
+import { Alerta } from './base/Alerta.js';
+import { Botao } from './base/Botao.js';
+import { Cartao } from './base/Cartao.js';
 import { rotuloDeErro } from '../rede/erros.js';
 import { t } from '../i18n/pt-BR.js';
 
@@ -40,10 +43,7 @@ export function Chat({ euId = null, className = '' }: ChatProps): React.JSX.Elem
   }, [mensagens.length]);
 
   return (
-    <section
-      data-testid="chat"
-      className={`flex min-h-0 flex-col gap-2 rounded-xl bg-slate-900/70 p-3 text-sm text-white ${className}`}
-    >
+    <Cartao data-testid="chat" className={`flex min-h-0 flex-col gap-2 ${className}`}>
       <h2 className="font-semibold">{t.chat.titulo}</h2>
 
       {/**
@@ -95,21 +95,18 @@ export function Chat({ euId = null, className = '' }: ChatProps): React.JSX.Elem
             className="w-full rounded-lg bg-white/90 px-2 py-1.5 text-slate-900 placeholder:text-slate-500"
           />
         </label>
-        <button
+        <Botao
+          tom="secundario"
           type="submit"
           disabled={enviando || texto.trim().length === 0}
           data-testid="chat-enviar"
-          className="rounded-lg bg-white/20 px-3 py-1.5 transition hover:bg-white/30 disabled:opacity-40"
+          className="px-3 py-1.5"
         >
           {t.chat.enviar}
-        </button>
+        </Botao>
       </form>
 
-      {erro !== null && (
-        <p role="alert" className="rounded-lg bg-red-950/80 px-2 py-1 text-xs text-red-50">
-          {rotuloDeErro(erro)}
-        </p>
-      )}
-    </section>
+      {erro !== null && <Alerta compacto>{rotuloDeErro(erro)}</Alerta>}
+    </Cartao>
   );
 }
