@@ -11,7 +11,7 @@ import type { FastifyBaseLogger } from 'fastify';
 
 import type { PlayerDirectory } from '../identity/players.js';
 import { toRoomView, type Room, type RoomRegistry } from '../rooms/registry.js';
-import { emitSnapshot, type GameDeps } from './game.js';
+import { emitSnapshot, emitSnapshotTo, type GameDeps } from './game.js';
 import { handle } from './handle.js';
 import type { GameServer, GameSocket } from './types.js';
 
@@ -58,6 +58,21 @@ export function registerRoomCommands(socket: GameSocket, deps: RoomDeps): void {
       players.setNickname(playerId, payload.nickname);
       void socket.join(entrou.value.code);
       broadcastRoom(io, entrou.value);
+
+      /**
+       * Reentrar numa partida em andamento devolve o tabuleiro.
+       *
+       * `registry.join` é idempotente para quem volta à própria sala, e uma
+       * sala já iniciada **só** aceita quem já tem assento nela — as demais
+       * caem em `ROOM_ALREADY_STARTED` antes de chegar aqui. Então isto vai
+       * exatamente para quem tem direito ao estado, e é a mesma emissão que a
+       * conexão faz em `connection.ts`. Sem ela, quem reentrasse ficaria numa
+       * sala sem mesa, esperando um patch que só viria na jogada seguinte de
+       * outra pessoa.
+       *
+       * Não precisa de guarda: `emitSnapshotTo` já ignora sala sem partida.
+       */
+      emitSnapshotTo(socket, entrou.value, timer);
 
       return { ok: true, data: toRoomView(entrou.value) };
     },

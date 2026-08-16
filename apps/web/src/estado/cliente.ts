@@ -75,14 +75,22 @@ export function criarCliente(opcoes: OpcoesDoCliente): Cliente {
     });
 
   const driver = criarDriverDeRede(conexao);
+  const partida = criarStoreDaPartida(driver);
 
   return {
     modo: 'rede',
     driver,
     conexao,
-    partida: criarStoreDaPartida(driver),
+    partida,
     sala: criarStoreDaSala({
       conexao,
+      /* A única costura entre os dois stores, e ela mora aqui porque é aqui que
+         os dois existem juntos. `App` decide a tela por `mesa` antes de `sala`;
+         sair sem esquecer a mesa deixava o jogador preso no tabuleiro de uma
+         sala da qual o servidor já o tinha removido. */
+      aoSair: () => {
+        partida.getState().limpar();
+      },
       ...(opcoes.lerApelido === undefined ? {} : { lerApelido: opcoes.lerApelido }),
       ...(opcoes.gravarApelido === undefined ? {} : { gravarApelido: opcoes.gravarApelido }),
     }),

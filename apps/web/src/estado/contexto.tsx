@@ -64,11 +64,13 @@ const SEM_SALA: EstadoDaSala = {
   apelido: '',
   erro: null,
   ocupado: false,
+  assento: null,
   definirApelido: () => undefined,
   criar: () => Promise.resolve(),
   entrar: () => Promise.resolve(),
   escolherCor: () => Promise.resolve(),
   iniciar: () => Promise.resolve(),
+  voltar: () => Promise.resolve(),
   sair: () => Promise.resolve(),
   limparErro: () => undefined,
 };

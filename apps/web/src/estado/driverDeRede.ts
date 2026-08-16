@@ -78,6 +78,19 @@ export function criarDriverDeRede(conexao: Conexao): DriverDeRede {
     minhasJogadas: () => minhasJogadas,
     inicial: () => (mesa === null ? null : { mesa, legais, prazo }),
 
+    /**
+     * Sem `anunciar()`: ele exige `mesa` para montar o `Instantaneo`, e o que se
+     * quer aqui é justamente a ausência de mesa. Quem zera a tela é o store, que
+     * chama isto — este lado só garante que um patch atrasado não ressuscite a
+     * partida que acabou de ser deixada.
+     */
+    limpar() {
+      mesa = null;
+      legais = [];
+      prazo = null;
+      minhasJogadas = 0;
+    },
+
     assinar(o) {
       ouvintes.add(o);
       o.aoMudarConexao(conexao.estado());

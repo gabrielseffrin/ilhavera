@@ -25,6 +25,20 @@ export type EstadoDaSala = {
   erro: string | null;
   /** Um comando de sala em voo — para a tela não deixar clicar duas vezes. */
   ocupado: boolean;
+  /**
+   * O código da sala onde o assento continua meu, depois de eu ter saído.
+   *
+   * `RoomRegistry.leave` só desfaz assento de sala em `lobby`; numa partida em
+   * andamento ele apenas marca o jogador como desconectado, porque tirar alguém
+   * deixaria uma mesa de três com dois assentos no meio do turno. A consequência
+   * é que sair de uma partida **não** liberta: `room:create` recusa com
+   * `ALREADY_IN_ROOM` enquanto o assento existir.
+   *
+   * Guardar o código é o que transforma esse beco sem saída num caminho de
+   * volta. `null` quando a saída foi de um lobby, que realmente desfaz o
+   * assento.
+   */
+  assento: string | null;
 
   definirApelido: (apelido: string) => void;
   /** `settings` parcial: o zod do contrato completa o que faltar. */
@@ -33,6 +47,8 @@ export type EstadoDaSala = {
   escolherCor: (cor: PlayerColor) => Promise<void>;
   iniciar: () => Promise<void>;
   sair: () => Promise<void>;
+  /** Retoma o assento guardado. O servidor devolve a sala e o snapshot. */
+  voltar: () => Promise<void>;
   limparErro: () => void;
 };
 
@@ -40,6 +56,12 @@ export type StoreDaSala = StoreApi<EstadoDaSala>;
 
 export type OpcoesDaSala = {
   conexao: Conexao;
+  /**
+   * Chamado ao deixar a sala. Quem estava numa partida precisa esquecê-la, e
+   * este store não conhece o da partida de propósito — a costura fica em
+   * `criarCliente`, que é quem monta os dois.
+   */
+  aoSair?: () => void;
   /** Injetável para o teste: sem isto, N clientes dividiriam o mesmo apelido. */
   lerApelido?: () => string;
   gravarApelido?: (apelido: string) => void;
@@ -47,6 +69,7 @@ export type OpcoesDaSala = {
 
 export function criarStoreDaSala({
   conexao,
+  aoSair,
   lerApelido = apelidoGuardado,
   gravarApelido = guardarApelido,
 }: OpcoesDaSala): StoreDaSala {
@@ -74,7 +97,9 @@ export function criarStoreDaSala({
         return null;
       }
 
-      set({ ocupado: false, sala: ack.data });
+      // Entrou em alguma sala: o assento guardado, se havia, é esta sala mesma
+      // ou já não interessa.
+      set({ ocupado: false, sala: ack.data, assento: null });
       return ack.data;
     }
 
@@ -83,6 +108,7 @@ export function criarStoreDaSala({
       apelido: lerApelido(),
       erro: null,
       ocupado: false,
+      assento: null,
 
       definirApelido: (apelido) => {
         set({ apelido });
@@ -110,9 +136,31 @@ export function criarStoreDaSala({
 
       sair: async () => {
         if (get().ocupado) return;
+        const deixada = get().sala;
         set({ ocupado: true, erro: null });
         const ack = await conexao.enviar({ name: 'room:leave' });
-        set({ ocupado: false, sala: null, ...(ack.ok ? {} : { erro: ack.error }) });
+
+        /* Só partida em andamento deixa assento para trás; sair de um lobby
+           desfaz o assento de verdade, e oferecer "voltar" ali mandaria o
+           jogador para uma sala da qual ele saiu de propósito. */
+        const assento =
+          ack.ok && deixada !== null && deixada.status === 'playing' ? deixada.code : null;
+
+        set({ ocupado: false, sala: null, assento, ...(ack.ok ? {} : { erro: ack.error }) });
+        /* Fora do sucesso do ack, e de propósito: a sala local já é descartada
+           dos dois jeitos, e deixar a mesa de pé enquanto a sala some é
+           exatamente a divergência que fazia o botão não sair. Uma tela só. */
+        aoSair?.();
+      },
+
+      voltar: async () => {
+        const codigo = get().assento;
+        if (codigo === null) return;
+        /* `room:join` na própria sala é idempotente do lado do servidor, e é o
+           mesmo comando de quem entra pela primeira vez — não há caminho
+           especial de "retomar" para divergir do normal. O tabuleiro volta pelo
+           `state:snapshot` que o handler emite. */
+        await mandar('room:join', { code: codigo, nickname: get().apelido.trim() });
       },
 
       limparErro: () => {

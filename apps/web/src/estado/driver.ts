@@ -62,6 +62,16 @@ export type Driver = {
   minhasJogadas: () => number;
   /** Só o hot-seat sorteia outra partida; em rede isso é sair da sala. */
   reiniciar?: (seed?: string) => void;
+  /**
+   * Esquecer a mesa: não estou mais numa partida.
+   *
+   * Só a rede implementa, e é a contraparte de `reiniciar` — o comentário acima
+   * já dizia que sair da sala é o equivalente em rede, mas faltava a metade que
+   * apaga o que ficou. Sem isto a `ClientView` antiga sobrevive ao `room:leave`,
+   * e a sala seguinte abre mostrando o tabuleiro da anterior até o primeiro
+   * snapshot chegar.
+   */
+  limpar?: () => void;
 };
 
 /**

@@ -10,6 +10,8 @@
 import { useState } from 'react';
 
 import { useSala } from '../estado/contexto.js';
+import { Alerta } from '../hud/base/Alerta.js';
+import { Botao } from '../hud/base/Botao.js';
 import { rotuloDeErro } from '../rede/erros.js';
 import { t } from '../i18n/pt-BR.js';
 
@@ -20,6 +22,8 @@ export function Entrada(): React.JSX.Element {
   const entrar = useSala((s) => s.entrar);
   const erro = useSala((s) => s.erro);
   const ocupado = useSala((s) => s.ocupado);
+  const assento = useSala((s) => s.assento);
+  const voltar = useSala((s) => s.voltar);
 
   const [codigo, setCodigo] = useState('');
   /**
@@ -37,6 +41,35 @@ export function Entrada(): React.JSX.Element {
     <main className="flex h-full items-center justify-center overflow-y-auto p-4">
       <div className="my-auto flex w-full max-w-sm flex-col gap-4 rounded-2xl bg-white/10 p-6 backdrop-blur">
         <h1 className="text-2xl font-semibold text-white drop-shadow">{t.jogo.nome}</h1>
+
+        {/**
+         * O caminho de volta para quem saiu de uma partida em andamento.
+         *
+         * Fica **antes** do apelido de propósito: quem chega aqui com assento
+         * guardado quase sempre chegou sem querer, e a primeira coisa na tela
+         * tem de ser a saída para o erro, não o formulário que o repetiria.
+         * Sem isto o jogador fica preso — `room:create` recusa com
+         * `ALREADY_IN_ROOM` enquanto o assento existir, e o texto da recusa não
+         * explica o que fazer.
+         */}
+        {assento !== null && (
+          <section
+            data-testid="assento-guardado"
+            className="flex flex-col gap-2 rounded-controle bg-white/15 p-3"
+          >
+            <p className="text-sm text-white/90">{t.entrada.assentoGuardado(assento)}</p>
+            <Botao
+              tom="afirmativo"
+              disabled={ocupado}
+              onClick={() => {
+                void voltar();
+              }}
+              className="px-3 py-2"
+            >
+              {t.entrada.voltarParaPartida}
+            </Botao>
+          </section>
+        )}
 
         <label className="flex flex-col gap-1 text-sm text-white/90">
           {t.entrada.apelido}
@@ -68,16 +101,16 @@ export function Entrada(): React.JSX.Element {
           </select>
         </label>
 
-        <button
-          type="button"
+        <Botao
+          tom="afirmativo"
           disabled={semApelido || ocupado}
           onClick={() => {
             void criar({ turnSeconds });
           }}
-          className="rounded-lg bg-emerald-600 px-3 py-2 text-white transition hover:bg-emerald-500 disabled:opacity-40"
+          className="px-3 py-2"
         >
           {t.entrada.criarSala}
-        </button>
+        </Botao>
 
         <div className="flex items-end gap-2">
           <label className="flex flex-1 flex-col gap-1 text-sm text-white/90">
@@ -92,23 +125,19 @@ export function Entrada(): React.JSX.Element {
               data-testid="codigo"
             />
           </label>
-          <button
-            type="button"
+          <Botao
+            tom="secundario"
             disabled={semApelido || ocupado || codigo.trim().length < 6}
             onClick={() => {
               void entrar(codigo);
             }}
-            className="rounded-lg bg-white/20 px-3 py-2 text-white transition hover:bg-white/30 disabled:opacity-40"
+            className="px-3 py-2"
           >
             {t.entrada.entrar}
-          </button>
+          </Botao>
         </div>
 
-        {erro !== null && (
-          <p role="alert" className="rounded-lg bg-red-950/80 px-3 py-2 text-sm text-red-50">
-            {rotuloDeErro(erro)}
-          </p>
-        )}
+        {erro !== null && <Alerta>{rotuloDeErro(erro)}</Alerta>}
       </div>
     </main>
   );

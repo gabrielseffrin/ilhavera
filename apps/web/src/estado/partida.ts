@@ -58,6 +58,8 @@ export type EstadoDaPartida = {
 
   executar: (acao: Action) => void;
   reiniciar: (seed?: string) => void;
+  /** Esquece a partida: a tela volta a ser a sala ou a porta de entrada. */
+  limpar: () => void;
   limparErro: () => void;
 };
 
@@ -83,6 +85,18 @@ export function criarStoreDaPartida(driver: Driver): StoreDaPartida {
     reiniciar: (seed) => {
       driver.reiniciar?.(seed);
       set({ erro: null });
+    },
+
+    /**
+     * Não estou mais numa partida — quem chama é a saída da sala.
+     *
+     * Zera o driver **e** o store: o driver para o patch atrasado poder chegar
+     * sem ressuscitar nada, o store porque é ele que a tela lê. Deixar só um dos
+     * dois foi o defeito original, com a diferença de qual metade sobrava.
+     */
+    limpar: () => {
+      driver.limpar?.();
+      set({ mesa: null, legais: [], ativo: null, prazo: null, erro: null, minhasJogadas: 0 });
     },
 
     limparErro: () => {

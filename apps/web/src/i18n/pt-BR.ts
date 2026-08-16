@@ -44,6 +44,9 @@ export const t = {
     criarSala: 'Criar sala',
     codigoDaSala: 'Código da sala',
     entrar: 'Entrar',
+    voltarParaPartida: 'Voltar para a partida',
+    assentoGuardado: (codigo: string) =>
+      `Seu lugar na sala ${codigo} continua reservado — a partida segue sem você até voltar.`,
   },
 
   sala: {
