@@ -788,6 +788,7 @@ aparecer.
 - [x] **M6** — Feedback sonoro e animações de transição — `apps/web/src/som/`, `src/board/movimento.ts`
 - [x] **M7** — i18n (pt-BR no MVP, estrutura pronta para en) — `packages/rules/src/narracao/pt-BR.ts`, `apps/web/src/i18n/pt-BR.ts`
 - **Aceite:** ⏳ **pendente** — heurística de usabilidade com 4 jogadores sem precisar de explicação prévia da interface. É playtest com pessoas (nível 5 da §8), e nenhum teste desta suíte pode substituí-lo. Os sete marcos estão entregues e verdes; o aceite é a próxima coisa a acontecer.
+  - **Preparo: feito.** As duas coisas que a suíte declaradamente não alcança foram conferidas à mão — o layout nos três tamanhos que a M2 mirou (390×844, 844×390, 1024×768) e os timbres do som —, mais um ensaio de mesa cheia do lobby à vitória. Não é o aceite, e não pretende ser: é o que evita gastar a sessão com as quatro pessoas num defeito que já se sabia possível. Falta só a sessão.
 
 #### Decisões tomadas ao abrir a fase
 
@@ -1128,8 +1129,8 @@ isso não é tudo.
 | Pendência                                                            | Onde                                    | Quando                                                     |
 | -------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------- |
 | **Aceite da fase**: playtest de usabilidade com 4 pessoas            | —                                       | próxima sessão; nenhum teste o substitui                   |
-| Layout responsivo **não foi conferido em navegador**                 | `apps/web/src/telas/Partida.tsx`        | antes do playtest: jsdom não faz layout                    |
-| Timbres dos sons nunca foram ouvidos                                 | `apps/web/src/som/sintese.ts`           | idem — som não se verifica por asserção                    |
+| ~~Layout responsivo **não foi conferido em navegador**~~             | `apps/web/src/telas/Partida.tsx`        | ✅ conferido nos três tamanhos da M2                       |
+| ~~Timbres dos sons nunca foram ouvidos~~                             | `apps/web/src/som/sintese.ts`           | ✅ ouvidos                                                 |
 | E2E em navegador de verdade (Playwright)                             | `apps/web/test/multijogador.test.tsx`   | Fase 6, onde há URL pública para apontar                   |
 | Chat sem persistência: quem entra depois não vê o que passou         | `apps/server/src/protocol/chat.ts`      | decisão, não pendência — reabrir só se alguém sentir falta |
 | `duration_s` conta do reinício numa partida que atravessou um deploy | `apps/server/src/game/room.ts`          | aproximação assumida; é estatística, não contabilidade     |
