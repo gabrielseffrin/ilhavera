@@ -9,13 +9,31 @@
 
 import type { PlayerColor, Resource, Terrain } from '@ilhavera/rules';
 
+/**
+ * Os seis terrenos.
+ *
+ * **Separados por luminosidade antes de por matiz.** A versão da Fase 3 tinha
+ * Campo em `0.84 0.14 92` e Deserto em `0.86 0.05 88` — mesmo matiz, dois
+ * centésimos de luminosidade de diferença, separados só pelo croma. De relance,
+ * e sobretudo para quem não distingue matiz, eram o mesmo hexágono. Isso não é
+ * questão de gosto: confundir Campo com Deserto é escolher onde assentar com a
+ * informação errada.
+ *
+ * A escada de luminosidade agora é Floresta 0.42 → Colina 0.55 → Pasto 0.74 →
+ * Campo 0.82 → Deserto 0.89, que é a ordem em que eles se separam **sem cor
+ * nenhuma**. Deserto ficou o mais claro e o mais neutro (croma 0.02), que é o
+ * que ele é: areia sem produção.
+ *
+ * A marca d'água de `terrenos.ts` é a segunda camada de redundância, no mesmo
+ * espírito da marca por forma dos jogadores: cor nunca é o único sinal.
+ */
 export const COR_DO_TERRENO: Readonly<Record<Terrain, string>> = {
   forest: 'oklch(0.42 0.09 150)',
   hill: 'oklch(0.55 0.13 42)',
-  pasture: 'oklch(0.80 0.12 132)',
-  field: 'oklch(0.84 0.14 92)',
+  pasture: 'oklch(0.74 0.14 140)',
+  field: 'oklch(0.82 0.16 95)',
   mountain: 'oklch(0.58 0.03 265)',
-  desert: 'oklch(0.86 0.05 88)',
+  desert: 'oklch(0.89 0.02 80)',
 };
 
 /**
@@ -144,7 +162,19 @@ export const COR_DO_RECURSO: Readonly<Record<Resource, string>> = {
  * jogo, não enfeite: quem escolhe onde assentar precisa vê-los de longe.
  */
 export function corDaFicha(numero: number): string {
-  return numero === 6 || numero === 8 ? 'oklch(0.50 0.20 27)' : 'oklch(0.25 0.01 260)';
+  return fichaQuente(numero) ? 'oklch(0.50 0.20 27)' : 'oklch(0.25 0.01 260)';
+}
+
+/**
+ * 6 e 8 — os números mais prováveis.
+ *
+ * Existe separado de `corDaFicha` porque a cor não pode ser o único destaque:
+ * quem não distingue vermelho de preto perdia a informação inteira. A ficha
+ * quente também ganha borda mais grossa, que é sinal de forma e sobrevive a
+ * qualquer daltonismo — a mesma escolha que `MARCA_DO_JOGADOR` fez pelas peças.
+ */
+export function fichaQuente(numero: number): boolean {
+  return numero === 6 || numero === 8;
 }
 
 /**

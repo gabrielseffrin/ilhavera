@@ -13,7 +13,7 @@
 
 import { HEX_SIZE, type ClientView, type GameState } from '@ilhavera/rules';
 
-import { caixaDoTabuleiro, viewBox } from './geometria.js';
+import { caixaDoTabuleiro, cantosDoHexagono, pontosDoPoligono, viewBox } from './geometria.js';
 import { COR_DO_MAR } from './cores.js';
 import { Hexagono } from './Hexagono.js';
 import { Portos } from './Portos.js';
@@ -51,6 +51,33 @@ export function Tabuleiro({ estado, children }: TabuleiroProps): React.JSX.Eleme
         height={caixa.altura}
         fill={COR_DO_MAR}
       />
+
+      {/**
+       * A costa: cada hexágono desenhado uma vez a mais, um pouco maior e em cor
+       * de areia, **antes** da camada de terreno.
+       *
+       * Como os hexágonos se tocam sem folga, o halo de um vizinho é coberto
+       * pelo terreno do outro — sobra só a borda externa da ilha, que é
+       * exatamente o contorno que se quer. Sai de graça: nenhuma travessia de
+       * grafo, nenhum cálculo de fronteira, e continua certo se o tabuleiro de
+       * 5–6 jogadores de §1 mudar o formato.
+       *
+       * Antes disto a terra encostava no mar sem transição, e as duas coisas
+       * pareciam recortadas com tesoura.
+       */}
+      <g data-camada="costa" pointerEvents="none">
+        {board.hexOrder.map((id) => {
+          const hex = board.hexes[id];
+          if (hex === undefined) return null;
+          return (
+            <polygon
+              key={id}
+              points={pontosDoPoligono(cantosDoHexagono(hex.pixel, HEX_SIZE * 1.08))}
+              fill="oklch(0.88 0.05 82)"
+            />
+          );
+        })}
+      </g>
 
       <Portos board={board} caixa={caixa} />
 

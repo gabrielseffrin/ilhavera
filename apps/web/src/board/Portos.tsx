@@ -7,16 +7,20 @@
  * físico e como o jogador espera ver.
  */
 
-import {
-  HEX_SIZE,
-  portLabel,
-  RESOURCE_LABELS,
-  type BoardGraph,
-  type PortType,
-  type Pixel,
-} from '@ilhavera/rules';
+import { HEX_SIZE, portLabel, type BoardGraph, type PortType, type Pixel } from '@ilhavera/rules';
 
+import { CAMINHO_DO_RECURSO } from '../hud/icones/IconeDeRecurso.js';
+import { COR_DO_RECURSO } from './cores.js';
 import { centroDoTabuleiro, direcaoParaFora, type Caixa } from './geometria.js';
+
+/** O ícone do recurso, encolhido para caber na metade de baixo do selo. */
+const LADO_DO_ICONE = 24;
+const SELO = (HEX_SIZE * 0.26) / LADO_DO_ICONE;
+
+function selarIcone(x: number, y: number): string {
+  const canto = (LADO_DO_ICONE / 2) * SELO;
+  return `translate(${(x - canto).toFixed(2)} ${(y - canto).toFixed(2)}) scale(${SELO.toFixed(3)})`;
+}
 
 export type PortosProps = {
   board: BoardGraph;
@@ -96,38 +100,45 @@ export function Portos({ board, caixa }: PortosProps): React.JSX.Element {
               );
             })}
 
+            {/**
+             * O anel diz **qual** porto, e o disco continua claro.
+             *
+             * Os nove portos eram discos cinza idênticos, distinguidos por um
+             * nome de recurso em 8,4px — ilegível no tamanho em que o tabuleiro
+             * é realmente olhado. Pintar o disco inteiro na cor do recurso
+             * resolveria a identificação e quebraria o contraste do "2:1", que
+             * teria de ser claro sobre Trigo e escuro sobre Minério. O anel
+             * carrega a cor, o disco carrega o texto, e nenhum atrapalha o
+             * outro.
+             */}
             <circle
               cx={selo.x}
               cy={selo.y}
               r={HEX_SIZE * 0.3}
-              fill="oklch(0.93 0.02 240)"
-              stroke="oklch(0.35 0.03 250)"
-              strokeWidth={2}
+              fill="oklch(0.95 0.015 240)"
+              stroke={par.tipo === 'generic' ? 'oklch(0.45 0.02 250)' : COR_DO_RECURSO[par.tipo]}
+              strokeWidth={par.tipo === 'generic' ? 2.5 : 4}
             />
             <text
               x={selo.x}
-              y={par.tipo === 'generic' ? selo.y : selo.y - HEX_SIZE * 0.09}
+              y={par.tipo === 'generic' ? selo.y : selo.y - HEX_SIZE * 0.11}
               textAnchor="middle"
               dominantBaseline="middle"
               fontSize={HEX_SIZE * 0.2}
               fontWeight={700}
-              fill="oklch(0.30 0.03 250)"
+              fill="oklch(0.28 0.03 250)"
             >
               {par.tipo === 'generic' ? '3:1' : '2:1'}
             </text>
-            {/* Só o recurso embaixo: a taxa já está na linha de cima, e repetir
-                "2:1" transbordava o selo. */}
+            {/* O desenho no lugar do nome: a mesma marca que o hexágono que
+                produz o recurso leva, e que a carta na mão leva. */}
             {par.tipo !== 'generic' && (
-              <text
-                x={selo.x}
-                y={selo.y + HEX_SIZE * 0.12}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fontSize={HEX_SIZE * 0.14}
-                fill="oklch(0.30 0.03 250)"
-              >
-                {RESOURCE_LABELS[par.tipo]}
-              </text>
+              <path
+                d={CAMINHO_DO_RECURSO[par.tipo]}
+                fill="oklch(0.28 0.03 250)"
+                transform={selarIcone(selo.x, selo.y + HEX_SIZE * 0.11)}
+                pointerEvents="none"
+              />
             )}
           </g>
         );
