@@ -20,6 +20,9 @@ import {
 } from '@ilhavera/rules';
 
 import { COR_DO_RECURSO } from '../board/cores.js';
+import { Cartao } from './base/Cartao.js';
+import { IconeDeRecurso } from './icones/IconeDeRecurso.js';
+import { IconeDeSimbolo } from './icones/IconeDeSimbolo.js';
 import { t } from '../i18n/pt-BR.js';
 
 export type PainelDaMaoProps = {
@@ -35,32 +38,45 @@ export function PainelDaMao({ voce, turno }: PainelDaMaoProps): React.JSX.Elemen
   const total = RESOURCES.reduce((soma, r) => soma + voce.resources[r], 0);
 
   return (
-    <section
-      data-testid="painel-da-mao"
-      className="rounded-xl bg-slate-900/70 p-3 text-sm text-white"
-    >
+    <Cartao data-testid="painel-da-mao">
       <h2 className="mb-2 flex items-baseline gap-2 font-semibold">
         Mão de {voce.name}
         <span className="text-xs font-normal text-white/60">{total} cartas</span>
       </h2>
 
+      {/**
+       * Carta, e não pílula de texto: proporção em pé, ícone em cima, a
+       * quantidade como a coisa maior. A quantidade é o que se lê dezenas de
+       * vezes por partida — "tenho trigo para a cidade?" —, e antes ela era o
+       * menor caractere da linha.
+       *
+       * Recurso zerado continua na fila, apagado: sumir mudaria a posição dos
+       * outros a cada rolagem, e a mão é justamente onde a memória muscular
+       * importa. A sombra só aparece com duas ou mais, e é o que dá a pilha sem
+       * custar um nó por carta.
+       */}
       <ul className="flex flex-wrap gap-1.5">
-        {RESOURCES.map((r) => (
-          <li
-            key={r}
-            data-recurso={r}
-            data-qtd={voce.resources[r]}
-            title={RESOURCE_LABELS[r]}
-            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-slate-900"
-            style={{
-              backgroundColor: COR_DO_RECURSO[r],
-              opacity: voce.resources[r] === 0 ? 0.3 : 1,
-            }}
-          >
-            {RESOURCE_LABELS[r]}
-            <strong className="tabular-nums">{voce.resources[r]}</strong>
-          </li>
-        ))}
+        {RESOURCES.map((r) => {
+          const quantas = voce.resources[r];
+          return (
+            <li
+              key={r}
+              data-recurso={r}
+              data-qtd={quantas}
+              title={RESOURCE_LABELS[r]}
+              className="flex w-12 flex-col items-center gap-0.5 rounded-controle px-1 pt-1.5 pb-1 text-slate-900"
+              style={{
+                backgroundColor: COR_DO_RECURSO[r],
+                opacity: quantas === 0 ? 0.3 : 1,
+                boxShadow: quantas > 1 ? '2px 2px 0 0 rgb(0 0 0 / 0.25)' : 'none',
+              }}
+            >
+              <IconeDeRecurso recurso={r} tamanho={17} />
+              <strong className="text-sm leading-none tabular-nums">{quantas}</strong>
+              <span className="text-[0.6rem] leading-none">{RESOURCE_LABELS[r]}</span>
+            </li>
+          );
+        })}
       </ul>
 
       <h3 className="mt-3 mb-1 text-xs font-semibold text-white/70">{t.mao.cartasDeProgresso}</h3>
@@ -78,12 +94,13 @@ export function PainelDaMao({ voce, turno }: PainelDaMaoProps): React.JSX.Elemen
                 /* Carta travada é a que não dá para jogar hoje, e isso se diz
                    por escrito ao lado. Apagá-la até o texto sumir seria
                    esconder a informação em vez de qualificá-la. */
-                className={`rounded-lg px-2 py-1 text-xs ${
+                className={`flex items-center gap-1 rounded-controle px-2 py-1 text-xs ${
                   travada ? 'bg-white/10 text-white/70' : 'bg-white/90 text-slate-900'
                 }`}
               >
+                <IconeDeSimbolo simbolo={c.card} tamanho={13} />
                 {DEV_CARD_LABELS[c.card]}
-                {travada && <span className="ml-1">{t.mao.compradaNesteTurno}</span>}
+                {travada && <span>{t.mao.compradaNesteTurno}</span>}
               </li>
             );
           })}
@@ -94,7 +111,7 @@ export function PainelDaMao({ voce, turno }: PainelDaMaoProps): React.JSX.Elemen
         <span className="font-semibold">{t.mao.portos}</span>{' '}
         {voce.ports.length === 0 ? t.mao.nenhum : voce.ports.map(nomeDoPorto).join(', ')}
       </p>
-    </section>
+    </Cartao>
   );
 }
 

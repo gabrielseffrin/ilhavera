@@ -23,6 +23,7 @@ import {
 } from '@ilhavera/rules';
 
 import { IconeDoJogador } from '../board/Marca.js';
+import { IconeDeSimbolo } from './icones/IconeDeSimbolo.js';
 import { t } from '../i18n/pt-BR.js';
 
 export type FimDePartidaProps = {
@@ -77,7 +78,8 @@ export function FimDePartida({ mesa }: FimDePartidaProps): React.JSX.Element | n
     >
       <p className="flex items-center gap-2 text-sm font-semibold">
         <IconeDoJogador cor={vencedor.color} />
-        🏆 {t.fimDePartida.venceuCom(vencedor.name, total(vencedor.id))}
+        <IconeDeSimbolo simbolo="trofeu" tamanho={15} />
+        {t.fimDePartida.venceuCom(vencedor.name, total(vencedor.id))}
       </p>
 
       {placar !== null && (

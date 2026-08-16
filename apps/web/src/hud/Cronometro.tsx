@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { IconeDeSimbolo } from './icones/IconeDeSimbolo.js';
 import { t } from '../i18n/pt-BR.js';
 
 export type CronometroProps = {
@@ -52,11 +53,12 @@ export function Cronometro({ prazo, alerta = 10 }: CronometroProps): React.JSX.E
       role="timer"
       aria-live="off"
       aria-label={t.cronometro.restante(restante)}
-      className={`rounded-lg px-2 py-1 text-sm tabular-nums ${
-        apertado ? 'bg-red-950/80 text-red-50' : 'bg-white/20 text-white'
+      className={`inline-flex items-center gap-1 rounded-controle px-2 py-1 text-sm tabular-nums ${
+        apertado ? 'bg-perigo/80 text-perigo-texto' : 'bg-white/20 text-white'
       }`}
     >
-      ⏱ {restante}s
+      <IconeDeSimbolo simbolo="relogio" tamanho={13} />
+      {restante}s
     </span>
   );
 }

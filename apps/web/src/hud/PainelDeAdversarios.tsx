@@ -17,6 +17,8 @@ import {
 } from '@ilhavera/rules';
 
 import { IconeDoJogador } from '../board/Marca.js';
+import { Cartao } from './base/Cartao.js';
+import { IconeDeSimbolo } from './icones/IconeDeSimbolo.js';
 import { t } from '../i18n/pt-BR.js';
 
 export type PainelDeAdversariosProps = {
@@ -29,10 +31,7 @@ export function PainelDeAdversarios({ mesa, ativo }: PainelDeAdversariosProps): 
   const daVez = mesa.players[mesa.currentPlayerIndex]?.id ?? null;
 
   return (
-    <section
-      data-testid="painel-de-adversarios"
-      className="rounded-xl bg-slate-900/70 p-3 text-sm text-white"
-    >
+    <Cartao data-testid="painel-de-adversarios">
       <h2 className="mb-2 font-semibold">{t.jogadores.titulo}</h2>
 
       <ul className="flex flex-col gap-1.5">
@@ -54,22 +53,38 @@ export function PainelDeAdversarios({ mesa, ativo }: PainelDeAdversariosProps): 
               <IconeDoJogador cor={p.color} tamanho={13} />
               <span className="font-medium">{p.name}</span>
               {p.id === daVez && (
-                <span className="text-white/60" title={t.jogadores.jogadorDaVez}>
-                  ▶
+                <span className="text-white/70" title={t.jogadores.jogadorDaVez}>
+                  <IconeDeSimbolo simbolo="vez" tamanho={9} />
                 </span>
               )}
 
               <span className="ml-auto tabular-nums" title={t.jogadores.pvPublicos}>
                 {p.victoryPointsPublic} PV
               </span>
-              <span className="tabular-nums text-white/70" title={t.jogadores.cartasDeRecurso}>
-                {p.resourceCount}🂠
+              {/* Dorso genérico nas duas contagens: quantas, nunca quais. Trocar
+                  por ícone de recurso refaria aqui o vazamento que
+                  `toClientView` fecha — e `paineis.test.tsx` falha se o nome de
+                  um recurso aparecer nesta linha. */}
+              <span
+                className="flex items-center gap-0.5 tabular-nums text-white/70"
+                title={t.jogadores.cartasDeRecurso}
+              >
+                {p.resourceCount}
+                <IconeDeSimbolo simbolo="carta" tamanho={11} />
               </span>
-              <span className="tabular-nums text-white/70" title={t.jogadores.cartasDeProgresso}>
-                {p.devCardCount}✦
+              <span
+                className="flex items-center gap-0.5 tabular-nums text-white/70"
+                title={t.jogadores.cartasDeProgresso}
+              >
+                {p.devCardCount}
+                <IconeDeSimbolo simbolo="progresso" tamanho={11} />
               </span>
-              <span className="tabular-nums text-white/70" title={t.jogadores.soldadosJogados}>
-                {p.knightsPlayed}⚔
+              <span
+                className="flex items-center gap-0.5 tabular-nums text-white/70"
+                title={t.jogadores.soldadosJogados}
+              >
+                {p.knightsPlayed}
+                <IconeDeSimbolo simbolo="knight" tamanho={11} />
               </span>
               {/* `/50` media ~4,2:1 contra o fundo do painel, abaixo do piso
                   de 4,5:1 — e este texto é dos menores da tela. */}
@@ -94,7 +109,7 @@ export function PainelDeAdversarios({ mesa, ativo }: PainelDeAdversariosProps): 
           );
         })}
       </ul>
-    </section>
+    </Cartao>
   );
 }
 
